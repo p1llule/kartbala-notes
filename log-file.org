@@ -1,0 +1,328 @@
+This document specify the steps I used to replicate and develop kartabala/emacs. It is a live document : some of the org-block are meant to be evaluated in emacs with ﴾ C-c C-c \ (org-ctrl-c-ctrl-c) ﴿, to evaluate sh/bash blocks, ob-shell is required. some are meant to be tangled with ﴾ C-c C-v C-t / (org-babel-tangle) ﴿, a block can be tangled alone by adding an universal-argument ﴾ C-u C-c C-v C-t ﴿.
+*Warning : tangling will override any files already present!*
+
+#+begin_src emacs-lisp
+(require 'ob-shell)
+#+end_src
+
+* mail configuration
+
+So to get mu4e working I used :
+ - a imap client (popular choices are offlineimap or isync) to get mails
+ - a smtp client (built-in emacs) to send mails
+ - a way to specify the authentification (.authinfo.gpg) file
+ - a way to protect our authenfification (gpg)
+
+** .offlineimaprc
+This is a simple offlineimap configuration file, it specifies the accounts, eventually the folders to sync, the passwords and the certificates of the mail provider.
+
+https://stackoverflow.com/questions/24675167/ca-certificates-mac-os-x
+It seems there is two ways to get the certificate on macos:
+ - or export them from the keychain
+ - or install openssl, it will also export them into /usr/local/etc/openssl/cert.pem from the keychain.
+
+The password can be specified in plain text inside this document with a `remotepass = <password>` instead of the `remotepasseval = <pythonfunc(args)>, it is useful to do so when testing the file, once it is done,  I implemented a more secure way to store them.
+
+#+begin_src conf :tangle ~/.offlineimaprc
+  [general]
+  # adjust here the name and number of accounts
+  accounts = lazysnail2077, 2077snaillazy
+  maxsyncaccounts = 2
+  ui=TTYUI
+  socktimeout = 60
+  # password management functions
+  pythonfile = ~/.offlineimap.py
+
+  ## account 1
+  [Account lazysnail2077]
+  localrepository = Local-lazysnail2077
+  remoterepository = Remote-lazysnail2077
+
+  [Repository Local-lazysnail2077]
+  type = Maildir
+  localfolders = ~/.mail/lazysnail2077
+
+  [Repository Remote-lazysnail2077]
+  type = Gmail
+  remotehost = imap.gmail.com
+  remoteuser = lazysnail2077@gmail.com
+  remotepasseval = get_password_emacs("imap.gmail.com", "lazysnail2077@gmail.com", "993")
+  ssl = yes
+  sslcacertfile = /etc/ssl/certs/ca-certificates.crt
+  maxconnections = 2
+  # folder(s)? to exclude
+  # All Mail seems to be a constant source of duplicates
+  folderfilter = lambda foldername: foldername not in ['[Gmail]/All Mail']
+
+  ## account 2
+  [Account 2077snaillazy]
+  localrepository = Local-2077snaillazy
+  remoterepository = Remote-2077snaillazy
+
+  [Repository Local-2077snaillazy]
+  type = Maildir
+  localfolders = ~/.mail/2077snaillazy
+
+  [Repository Remote-2077snaillazy]
+  type = Gmail
+  remotehost = imap.gmail.com
+  remoteuser = 2077snaillazy@gmail.com
+  remotepasseval = get_password_emacs("imap.gmail.com", "2077snaillazy@gmail.com", "993")
+  ssl = yes
+  sslcacertfile = /etc/ssl/certs/ca-certificates.crt
+  maxconnections = 2
+  folderfilter = lambda foldername: foldername not in ['[Gmail]/All Mail']
+#+end_src
+
+** gpg key
+Since I rely on encryption to secure my credentials; here a simple memo :
+
+*** creation
+the simplest way get a pair of gpg key is to create them interactively in a terminal:
+#+begin_src bash :eval no
+gpg2 --full-generate-key
+#+end_src
+
+And that is pretty all with gpg alone, now we can uses this key inside emacs and with other softwares.
+
+*** (optional) sharing our id
+now eventually we can declare ourselves to keyservers. This may be helpful for eg signing a FSF assessment.
+
+first check our fingerprint :
+#+begin_src bash :results pp
+gpg --fingerprint lazysnail2077@gmail.com
+#+end_src
+
+#+RESULTS:
+: pub   rsa4096 2021-05-28 [SC]
+:       E9AF 49C4 6F8E AE92 139D  F319 4814 7806 2064 2A11
+: uid           [ultimate] Lazy Snail <lazysnail2077@gmail.com>
+: sub   rsa4096 2021-05-28 [E]
+:
+
+E9AF 49C4 6F8E AE92 139D  F319 4814 7806 2064 2A11
+is the fingerprint,
+4814 7806 2064 2A11
+is the long key id
+2064 2A11
+is the short key id
+
+So finally we can send it to the keyservers of our choice :
+#+begin_src bash
+gpg2 --keyserver keys.gnupg.net --search "20642A11"
+#+end_src
+
+and verify it worked :
+#+begin_src bash
+gpg2 --keyserver keys.gnupg.net --search "20642A11"
+#+end_src
+
+the server should return the mail address we initially specified.
+
+*** (optional) going beyond
+This setup may be enhanced by creating a signing subkey and keeping our master key and revocation certificate in, eg a cold storage.
+https://alexcabal.com/creating-the-perfect-gpg-keypair
+
+** authinfo
+[[elisp:(info "(auth) Help for users")][authinfo manual]]
+By creating this file as =~/.authinfo.gpg= with emacs, emacs will automatically recognize it is an encrypted file and ask you which gpg key you wish to use when needed.
+The format of netrc|authinfo file is quite simple when we get it:
+#+begin_example
+machine imap.gmail.com port 993 login this.is@mail.net password very-secure-password
+machine smtp.gmail.com port 587 login this.is@mail.net password very-secure-password
+machine imap.gmail.com port 993 login another@mail.net password very-much-secure-password
+machine smtp.gmail.com port 587 login another@mail.net password very-much-secure-password
+#+end_example
+** .offlineimap.py
+This setup imply to start emacs as a server with emacsclient:
+
+To start an emacsclient session, you can type in a terminal `emacsclient -c -a ""`, or use ~server-start~ from inside an emacs session.
+To kill the server and emacs I can use `pkill emacs`.
+
+credits to https://www.emacswiki.org/emacs/OfflineIMAP with little modifications:
+#+begin_src python :tangle "~/.offlineimap.py" :shebang "#!/bin/python"
+  import subprocess
+  def get_output(cmd):
+  # Bunch of boilerplate to catch the output of a command:
+	pipe = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+	(output, errout) = pipe.communicate()
+	assert pipe.returncode == 0 and not errout
+	return output
+  def get_password_emacs(host, user, port):
+	cmd = "emacsclient --eval '(offlineimap-get-password \"%s\" \"%s\" \"%s\")'" % (host,user,port)
+	return get_output(cmd).strip().lstrip('"').rstrip('"')
+#+end_src
+** offlineimap-get-password
+From the offlineimap documentation :
+#+begin_quote
+#    If a matching entry is found in ~/.netrc (see netrc (5) for
+#    information) this password will be used. Do note that netrc only
+#    allows one entry per hostname.
+#+end_quote
+I realized nor the original script of emacswiki nor the offlineimap mechanism would cut it. They are designed to get only one user per machine/port, or force you to use multiple files, this is not what I wanted, and we may have multiple accounts from the same machine/port.
+Thankfully to ~netrc.el~, the solution can be abstracted without too much boilerplate:
+#+begin_src emacs-lisp :results pp
+  (defun offlineimap-get-password (machine user port)
+    "Get the password of a .netrc file from its MACHINE, USER, PORT."
+    (require 'netrc)
+    (let* ((netrc (netrc-parse
+		   (expand-file-name "~/.authinfo.gpg")))
+	   credentials password)
+      (catch 'password
+	(dolist (credentials netrc)
+	  (when (netrc-machine (list credentials) machine)
+	    (dolist (lst credentials)
+	      (when (and (string= (cdr (assoc "login" credentials)) user)
+			 (string= (cdr (assoc "port" credentials)) port))
+		(throw 'password (cdr (assoc "password" credentials))))))))))
+
+  (offlineimap-get-password "imap.gmail.com" "lazysnail2077@gmail.com" "993")
+#+end_src
+** pittfalls
+
+ - activate IMAP in the gmail settings
+ - authorize "the less trusted applications"
+ - disconnect
+ - reconnect and validate in the security logs that's me who authorized the previous step.
+ - It may be necessary to go to a page validing a captcha ???
+
+It may not work yet and nobody will reliably tell you why. take a tea.
+then try to authenticate again with your IMAP client :
+
+Make a dry run to test the setup and eventually get the informations about your mail folders:
+
+#+begin_src sh
+offlineimap --dry-run
+#+end_src
+
+~offlineimap~ will throw errors with --dry-run when it is not initialized.
+This is a known bug, confusing, but known.
+So when using --dry-run to see the mailboxes creations with your =.offlineimaprc= settings, keep this in mind.
+
+*Always backup your local mailboxes before implementing new configurations!*
+
+** initialize mu
+
+Once the IMAP client is setup, we can initialize mu.
+#+begin_src sh
+mu init --maildir ~/.mail              \
+  --my-address=2077snaillazy@gmail.com \
+  --my-address=lazysnail2077@gmail.com
+mu index
+#+end_src
+
+** mu4e contexts
+
+mu4e allow to have multiple mail adress in the same setup. It is a good idea to defines these settings in a separate file from your main emacs configuration so it can be easily ignored by git with the =.gitignore= file, eg in ~user-emacs-directory~ =./personal/mu4e-contexts.el=
+
+I done it as a template. You can modify the top variables with your personal informations and they will be inlined at the appropriate place. You will also like to put your own signature, and to change the directory names with the ones appropriate for your mail provider. To declare more accounts, declare new top variables and add new ~make-mu4e-context~ expressions for them in the list.
+
+#+begin_src emacs-lisp :eval no  :tangle (concat  user-emacs-directory "personal/mu4e-contexts.el")
+(let* ((name1 "lazysnail2077")
+       (address1 (concat name1 "@gmail.com"))
+       (fullname1 "Lazy Snail")
+       (name2 "2077snaillazy")
+       (address2 (concat name2 "@gmail.com"))
+       (fullname2 "Snail Lazy "))
+;; a backquote with eval are used here to allow
+;; inline expressions prefixed with a comma
+  (eval
+   `(progn
+;; * default value
+      (customize-set-variable 'user-mail-address address1)
+;; * contexts
+      (setq mu4e-contexts
+;; ** 1 account
+            (list
+             (make-mu4e-context
+              :name ,fullname1
+              :enter-func (lambda ()
+                            (mu4e-message "Hello world."))
+;; this function change context by matching
+;; any mail that contact address1
+;; or uses one of its folders.
+;; this is quite agressive and the
+;; second part must be yet more tested
+              :match-func (lambda (msg)
+                            (or
+                             (when msg
+                               (mu4e-message-contact-field-matches
+                                msg '(:from :to :cc :bcc)
+                                ,address1))
+                             (when-let ((msg (mu4e-message-at-point 'no-error)))
+                               (string-match-p
+                                (concat "^/" ,name1 "/")
+                                (mu4e-message-field msg :maildir)))))
+              :vars '((user-mail-address . ,address1)
+                      (user-full-name . ,fullname1)
+                      (mu4e-compose-signature
+                       . "A snail is, in loose terms,
+a shelled gastropod.\n")
+;; *** 1 inbox settings
+;; initialise the folders otherwise
+;; it will uses and creates defaults ones
+                      (mu4e-trash-folder
+                       . ,(concat "/" name1
+                                  "/[Gmail].Trash"))
+                      (mu4e-sent-folder
+                       . ,(concat "/" name1
+                                  "/[Gmail].Sent Mail"))
+                      (mu4e-drafts-folder
+                       . ,(concat "/" name1
+                                  "/[Gmail].Drafts"))
+                      (mu4e-maildir-shortcuts
+                       . ((,(concat "/" name1 "/INBOX") . ?i)
+                          (,(concat "/" name1 "/[Gmail].Trash") . ?t)
+                          (,(concat "/" name1 "/[Gmail].Sent Mail") . ?s)
+                          (,(concat "/" name1 "/[Gmail].Spam") . ?S)))
+;; *** 1 smtp configuration
+                      (smtpmail-queue-dir
+                       . ,(concat "~/.mail/" name1 "/queue/cur"))
+                      (smtpmail-smtp-user . ,name1)
+                      (smtpmail-smtp-server . "smtp.gmail.com")
+                      (smtpmail-smtp-service . 587)))
+;; ** 2 account
+             (make-mu4e-context
+              :name ,fullname2
+              :enter-func (lambda ()
+                            (mu4e-message "Hello there"))
+              :match-func (lambda (msg)
+                            (or
+                             (when msg
+                               (mu4e-message-contact-field-matches
+                                msg '(:from :to :cc :bcc) ,address2))
+                             (when-let ((msg (mu4e-message-at-point 'no-error)))
+                               (string-match-p
+                                (concat "^/" ,name2 "/")
+                                (mu4e-message-field msg :maildir)))))
+              :vars '((user-mail-address . ,address2)
+                      (user-full-name . ,fullname2)
+                      (mu4e-compose-signature
+                       . "Snails feed at night,
+and they have teeths!")
+;; *** 2 inbox settings
+;; initialise the folders otherwise
+;; it will uses defaults ones
+                      (mu4e-trash-folder
+                       . ,(concat "/" name2 "/[Gmail].Trash"))
+                      (mu4e-sent-folder
+                       . ,(concat "/" name2 "/[Gmail].Sent Mail"))
+                      (mu4e-drafts-folder
+                       . ,(concat "/" name2 "/[Gmail].Drafts"))
+                      (mu4e-maildir-shortcuts
+                       . ((,(concat "/" name2 "/INBOX") . ?i)
+                          (,(concat "/" name2 "/[Gmail].Trash") . ?t)
+                          (,(concat "/" name2 "/[Gmail].Sent Mail") . ?s)
+                          (,(concat "/" name2 "/[Gmail].Spam") . ?S)))
+                      (smtpmail-queue-dir
+                       . ,(concat "~/.mail/" name2 "/queue/cur"))
+;; *** 2 smtp configuration
+                      (smtpmail-smtp-user . ,name2)
+                      (smtpmail-smtp-server . "smtp.gmail.com")
+                      (smtpmail-smtp-service . 587))))))))
+
+;; * end
+(provide 'personal_mail)
+#+end_src
+
+Once all these prerequisite are fulfilled, and mu4e is correctly configured in your emacs configuration, now you should have a mu4e working with multiple mail accounts ! \o/
