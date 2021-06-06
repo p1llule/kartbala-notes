@@ -399,3 +399,81 @@ Freely readapted from [[https://emacs.stackexchange.com/questions/26913/coloring
 (add-to-list 'mu4e~headers-line-handler-functions
              'mu4e-headers-line-apply-accounts-face)
 #+end_src
+
+* NEW facilitate code navigation inside emacs
+
+#+CAPTION: with defaults settings, read may code become difficult.
+[[file:Emacs_1.png]]
+
+Continue wrapped words at whitespace, rather than in the middle of a word.
+
+#+begin_src emacs-lisp
+(setq-default word-wrap t)
+#+end_src
+
+...but don't do any wrapping by default. It's expensive. Enable ~visual-line-mode~ if you want soft line-wrapping. ~auto-fill-mode~ for hard line-wrapping.
+
+#+begin_src emacs-lisp
+(setq-default truncate-lines t)
+#+end_src
+
+ If enabled (and `truncate-lines' was disabled), soft wrapping no longer occurs when that window is less than `truncate-partial-width-windows' characters wide. We don't need this, and it's extra work for Emacs otherwise, so off it goes.
+
+#+begin_src emacs-lisp
+(setq truncate-partial-width-windows nil)
+#+end_src
+
+Activate the visual-line-mode in all mode derived from the major-mode text-mode.
+
+#+begin_src emacs-lisp
+(add-hook 'text-mode-hook #'visual-line-mode)
+#+end_src
+
+Using elec-pair (built-in) we can easily wrap expression in parenthesis.
+
+#+begin_src emacs-lisp
+(use-package elec-pair
+    :ensure nil
+    :config
+    (electric-pair-mode 1))
+#+end_src
+
+~rainbow-delimiters~ add colors to the parenthesis in function of their depth, there is also a built-in mode, show-paren-mode, that match the pair of parens at point so we can use it to emphasize them.
+
+#+begin_src emacs-lisp
+(use-package rainbow-delimiters)
+
+(setq show-paren-when-point-inside-paren t
+      show-paren-when-point-in-periphery t)
+(show-paren-mode t)
+
+(set-face-attribute 'show-paren-match nil
+ 		      :strike-through t
+		      :underline nil
+		      :weight 'ultra-bold)
+#+end_src
+
+The Protesilaos Stavrou's themes are nice and well thought, they focus on choosing the colors with the better contrast to achieve the better accessibility ; I highly recommends them.
+
+#+begin_src emacs-lisp
+(use-package modus-themes
+  :config
+  (load-theme 'modus-vivendi)
+  (set-face-attribute 'default nil :height 800))
+#+end_src
+
+
+Next are not so related but IMHO nice.
+
+no tabs.
+#+begin_src emacs-lisp
+(set-default 'indent-tabs-mode nil)
+#+end_src
+
+yanking on top of a selection, replace the selection.
+#+begin_src emacs-lisp
+(delete-selection-mode 1)
+#+end_src
+
+#+CAPTION: with truncated lines, we have to navigate but it may be less confusing anyway.
+[[file:Emacs_2.png]]
