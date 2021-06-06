@@ -477,3 +477,106 @@ yanking on top of a selection, replace the selection.
 
 #+CAPTION: with truncated lines, we have to navigate but it may be less confusing anyway.
 [[file:Emacs_2.png]]
+
+** hydra comes to help
+
+~hydra~ is a popular package that can enhance the emacs interface by increasing the visibility of keybindings and allowing to define different type of behavior for the keys.
+It especially shine when for the keymaps containing repetitive commands such as the rectangle selection one :
+
+Here I define pink ‘heads’, that will
+ 1. not exit the hydra when called,
+ 2. still allow others external commands to be performed.
+
+#+begin_src emacs-lisp
+ (define-key ctl-x-map (kbd "<SPC>")
+  (defhydra hydra-rectangle (:body-pre (progn (rectangle-mark-mode 1))
+                             :color pink
+                             :hint nil
+                             :post (deactivate-mark))
+    "
+  ^^_i_^^   _w_:copy _o_pen  ^_N_ums _u_ndo
+_j_ _k_ _l_ _y_ank   _t_ype  ^^_s_wap-points
+ _q_uit^^^^ _d_:kill _c_lear _r_eset _R_egister"
+    ("i" rectangle-previous-line)
+    ("k" rectangle-next-line)
+    ("j" rectangle-backward-char)
+    ("l" rectangle-forward-char)
+    ("d" kill-rectangle)                    ; C-x r k
+    ("y" yank-rectangle)                    ; C-x r y
+    ("w" copy-rectangle-as-kill)            ; C-x r M-w
+    ("o" open-rectangle)                    ; C-x r o
+    ("t" string-rectangle)                  ; C-x r t
+    ("c" clear-rectangle)                   ; C-x r c
+    ("s" rectangle-exchange-point-and-mark) ; C-x C-x
+    ("N" rectangle-number-lines)            ; C-x r N
+    ("r" (if (region-active-p)
+             (deactivate-mark)
+           (rectangle-mark-mode 1)))
+    ("R" copy-rectangle-to-register)        ; C-x r r
+    ("u" undo nil)
+    ("q" nil)))
+#+end_src
+
+It can be used also to simply enhance the visibility of some hard to remember commands :
+
+The blue ‘head’ is the classical behavior : call the command once and exit the hydra.
+
+#+begin_src emacs-lisp
+(define-key help-map "a"
+  (defhydra hydra-apropos (:color blue :hint nil)
+    "
+⸤_a_⸣propos \
+◆ ⸤_c_⸣ommand \
+◆ ⸤_d_⸣docs
+valu⸤_e_⸣ \
+◆ ⸤_l_⸣ibrary \
+◆ ⸤_u_⸣ser option
+⸤_v_⸣ariable \
+◆ ⸤_i_⸣nfo \
+◆ ⸤_t_⸣ags
+local valu⸤_E_⸣ \
+◆ local ⸤_V_⸣ar \
+◇ ⸤_q_⸣uit"
+    ("a" apropos)
+    ("c" apropos-command)
+    ("d" apropos-documentation)
+    ("e" apropos-value)
+    ("l" apropos-library)
+    ("u" apropos-user-option)
+    ("v" apropos-variable)
+    ("i" info-apropos)
+    ("t" xref-find-apropos)
+    ("E" apropos-local-value)
+    ("V" apropos-local-variable)
+    ("q" nil)))
+#+end_src
+
+For this last example, it is an hydra meant to help to understand the sexp navigation of emacs, the commands keeps the letters they have in the global-map, but are more accessible and visible.
+
+#+begin_src emacs-lisp
+(global-set-key (kbd "<f6>")
+  (defhydra hydra-rectangle (:color pink
+                             :hint nil)
+    "
+_u_p   _a_:beg _p_rev _e_nd  _h_:m.def _t_ranspose
+_d_own _b_ack  _n_ext _f_orw _SPC_:m.sexp _q_uit
+_k_ill _c_heck _r_aiz _D_:nar.def _w_iden
+"
+    ("u" backward-up-list)
+    ("d" down-list)
+    ("a" beginning-of-defun)
+    ("p" backward-list)
+    ("e" end-of-defun)
+    ("b" backward-sexp)
+    ("n" forward-list)
+    ("f" forward-sexp)
+    ("h" mark-defun)
+    ("SPC" mark-sexp)
+    ("t" transpose-sexp)
+    ("k" kill-sexp)
+    ("c" check-parens)
+    ("r" raise-sexp)
+    ("D" narrow-to-defun)
+    ("w" widen)
+    ("q" nil)))
+#+end_src
