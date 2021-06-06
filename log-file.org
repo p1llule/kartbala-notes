@@ -77,13 +77,49 @@ The password can be specified in plain text inside this document with a `remotep
 ** gpg key
 Since I rely on encryption to secure my credentials; here a simple memo :
 
-*** creation
+*** NEW creation
 the simplest way get a pair of gpg key is to create them interactively in a terminal:
 #+begin_src bash :eval no
 gpg2 --full-generate-key
 #+end_src
 
 And that is pretty all with gpg alone, now we can uses this key inside emacs and with other softwares.
+
+Unfortunately maybe your terminal or emacs is not able on your computer to use your graphical server to ask passwords, so you may need to create a key in batch mode instead :
+
+#+begin_src bash :results pp
+# comment the next line to make a durable key
+export GNUPGHOME="$(mktemp -d)"
+# create a specification file in /tmp/crypto
+cat > /tmp/crypto <<EOF
+     %echo Generating a basic OpenPGP key
+     Key-Type: default
+     Key-Length: 4096
+     Subkey-Type: default
+     Subkey-Length: 4096
+     Name-Real: John Doe
+     Name-Comment: eventually
+     Name-Email: mymail@gmail.com.
+     Expire-Date: 0
+     Passphrase: very-secure-password
+     %commit
+     %echo done
+EOF
+# redirection only to get the output in org-mode
+2<&1 gpg --batch --generate-key /tmp/crypto
+# clear your traces.
+# Maybe clear your shell history also
+rm /tmp/crypto
+#+end_src
+
+#+RESULTS:
+: gpg: keybox '/tmp/tmp.hsDX3ATkaU/pubring.kbx' created
+: gpg: Generating a basic OpenPGP key
+: gpg: /tmp/tmp.hsDX3ATkaU/trustdb.gpg: trustdb created
+: gpg: key 826BDB0F4B39DA6C marked as ultimately trusted
+: gpg: directory '/tmp/tmp.hsDX3ATkaU/openpgp-revocs.d' created
+: gpg: revocation certificate stored as '/tmp/tmp.hsDX3ATkaU/openpgp-revocs.d/A658553F17EC9BDFD197CB7D826BDB0F4B39DA6C.rev'
+: gpg: done
 
 *** (optional) sharing our id
 now eventually we can declare ourselves to keyservers. This may be helpful for eg signing a FSF assessment.
