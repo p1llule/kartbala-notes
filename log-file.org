@@ -25,55 +25,58 @@ It seems there is two ways to get the certificate on macos:
 
 The password can be specified in plain text inside this document with a `remotepass = <password>` instead of the `remotepasseval = <pythonfunc(args)>, it is useful to do so when testing the file, once it is done,  I implemented a more secure way to store them.
 
+synclabels = yes
+labelsheader = X-Keywords
+
 #+begin_src conf :tangle ~/.offlineimaprc
-  [general]
-  # adjust here the name and number of accounts
-  accounts = lazysnail2077, 2077snaillazy
-  maxsyncaccounts = 2
-  ui=TTYUI
-  socktimeout = 60
-  # password management functions
-  pythonfile = ~/.offlineimap.py
+[general]
+# adjust here the name and number of accounts
+accounts = lazysnail2077, 2077snaillazy
+maxsyncaccounts = 2
+ui=TTYUI
+socktimeout = 60
+# password management functions
+pythonfile = ~/.offlineimap.py
 
-  ## account 1
-  [Account lazysnail2077]
-  localrepository = Local-lazysnail2077
-  remoterepository = Remote-lazysnail2077
+## account 1
+[Account lazysnail2077]
+localrepository = Local-lazysnail2077
+remoterepository = Remote-lazysnail2077
 
-  [Repository Local-lazysnail2077]
-  type = Maildir
-  localfolders = ~/.mail/lazysnail2077
+[Repository Local-lazysnail2077]
+type = Maildir
+localfolders = ~/.mail/lazysnail2077
 
-  [Repository Remote-lazysnail2077]
-  type = Gmail
-  remotehost = imap.gmail.com
-  remoteuser = lazysnail2077@gmail.com
-  remotepasseval = get_password_emacs("imap.gmail.com", "lazysnail2077@gmail.com", "993")
-  ssl = yes
-  sslcacertfile = /etc/ssl/certs/ca-certificates.crt
-  maxconnections = 2
-  # folder(s)? to exclude
-  # All Mail seems to be a constant source of duplicates
-  folderfilter = lambda foldername: foldername not in ['[Gmail]/All Mail']
+[Repository Remote-lazysnail2077]
+type = Gmail
+remotehost = imap.gmail.com
+remoteuser = lazysnail2077@gmail.com
+remotepasseval = get_password_emacs("imap.gmail.com", "lazysnail2077@gmail.com", "993")
+ssl = yes
+sslcacertfile = /etc/ssl/certs/ca-certificates.crt
+maxconnections = 2
+# folder(s)? to exclude
+# All Mail seems to be a constant source of duplicates
+folderfilter = lambda foldername: foldername not in ['[Gmail]/All Mail']
 
-  ## account 2
-  [Account 2077snaillazy]
-  localrepository = Local-2077snaillazy
-  remoterepository = Remote-2077snaillazy
+## account 2
+[Account 2077snaillazy]
+localrepository = Local-2077snaillazy
+remoterepository = Remote-2077snaillazy
 
-  [Repository Local-2077snaillazy]
-  type = Maildir
-  localfolders = ~/.mail/2077snaillazy
+[Repository Local-2077snaillazy]
+type = Maildir
+localfolders = ~/.mail/2077snaillazy
 
-  [Repository Remote-2077snaillazy]
-  type = Gmail
-  remotehost = imap.gmail.com
-  remoteuser = 2077snaillazy@gmail.com
-  remotepasseval = get_password_emacs("imap.gmail.com", "2077snaillazy@gmail.com", "993")
-  ssl = yes
-  sslcacertfile = /etc/ssl/certs/ca-certificates.crt
-  maxconnections = 2
-  folderfilter = lambda foldername: foldername not in ['[Gmail]/All Mail']
+[Repository Remote-2077snaillazy]
+type = Gmail
+remotehost = imap.gmail.com
+remoteuser = 2077snaillazy@gmail.com
+remotepasseval = get_password_emacs("imap.gmail.com", "2077snaillazy@gmail.com", "993")
+ssl = yes
+sslcacertfile = /etc/ssl/certs/ca-certificates.crt
+maxconnections = 2
+folderfilter = lambda foldername: foldername not in ['[Gmail]/All Mail']
 #+end_src
 
 ** gpg key
@@ -249,11 +252,16 @@ mu init --maildir ~/.mail              \
 mu index
 #+end_src
 
-** mu4e contexts
+** contexts
 
 mu4e allow to have multiple mail adress in the same setup. It is a good idea to defines these settings in a separate file from your main emacs configuration so it can be easily ignored by git with the =.gitignore= file, eg in ~user-emacs-directory~ =./personal/mu4e-contexts.el=
 
 I done it as a template. You can modify the top variables with your personal informations and they will be inlined at the appropriate place. You will also like to put your own signature, and to change the directory names with the ones appropriate for your mail provider. To declare more accounts, declare new top variables and add new ~make-mu4e-context~ expressions for them in the list.
+
+
+TODO: review this match function for a more simple use with
+
+(string-prefix-p "/gmail" (mu4e-message-field msg :maildir)
 
 #+begin_src emacs-lisp :eval no  :tangle (concat  user-emacs-directory "personal/mu4e-contexts.el")
 (let* ((name1 "lazysnail2077")
@@ -365,9 +373,16 @@ and they have teeths!")
 
 Once all these prerequisite are fulfilled, and mu4e is correctly configured in your emacs configuration, now you should have a mu4e working with multiple mail accounts ! \o/
 
+TODO: refine the gmail integration.
+
+Do we need to set (setq mu4e-sent-messages-behavior 'delete) ?
+
+
 ** NEW add faces to the accounts in the header view
 
 Freely readapted from [[https://emacs.stackexchange.com/questions/26913/coloring-mu4e-headers-based-on-title-content#50708][coloring-mu4e-headers-based-on-title-content]].
+
+colors can be introspected with ~list-colors-display~
 
 #+begin_src emacs-lisp
 (defvar mu4e-accounts-colors
@@ -400,6 +415,36 @@ Freely readapted from [[https://emacs.stackexchange.com/questions/26913/coloring
 
 (add-to-list 'mu4e~headers-line-handler-functions
              'mu4e-headers-line-apply-accounts-face)
+#+end_src
+
+** refile policy
+
+[[info:(info "(mu4e) Smart refiling")][From the mu4e manual]]
+
+The nice thing about the refile policy of mu4e is, it done in elisp and by a function you have full access to, so we can filter on the headers of the mail, content, or whatever is available at runtime.
+
+#+begin_src
+(setq mu4e-refile-folder
+       (lambda (msg)
+         (cond
+           ;; messages to the mu mailing list go to the /mu folder
+           ((mu4e-message-contact-field-matches msg :to
+              "mu-discuss@googlegroups.com")
+             "/mu")
+           ;; messages sent directly to some spefic address me go to /private
+           ((mu4e-message-contact-field-matches msg :to "me@example.com")
+             "/private")
+           ;; messages with football or soccer in the subject go to /football
+           ((string-match "football\\|soccer"
+              (mu4e-message-field msg :subject))
+             "/football")
+           ;; messages sent by me go to the sent folder
+           ((mu4e-message-sent-by-me msg
+              (mu4e-personal-addresses))
+             mu4e-sent-folder)
+           ;; everything else goes to /archive
+           ;; important to have a catch-all at the end!
+           (t  "/archive"))))
 #+end_src
 
 * NEW facilitate code navigation inside emacs
@@ -582,3 +627,40 @@ _k_ill _c_heck _r_aiz _D_:nar.def _w_iden
     ("w" widen)
     ("q" nil)))
 #+end_src
+
+* using git within emacs
+
+As we uses git as backend, it needs to be configured with an identity :
+#+BEGIN_SRC sh
+git config --global user.name "my full name"
+git config --global user.email "my.address@somemail.com"
+#+END_SRC
+
+Besides the built-in VC system, Emacs have a really popular package named ~Magit~.
+#+begin_src
+(use-package magit)
+#+end_src
+
+From here we can already commit/push/pull from a remote repository.
+
+** (a bit more involved) integration with the forges
+
+But we may also install the ~forge~ package to get a more complete integration with specific forges as github to being able to eg, make a pull request to a repository and merge one.
+
+#+begin_src emacs-lisp
+(use-package forge)
+#+end_src
+
+[[https://www.youtube.com/watch?v=fFuf3hExF5w][Zaiste makes a video about it]]
+
+[[https://github.com/settings/tokens/new][We need to go to the tokens settings of our user account to create one]].
+
+Once done we can use this password in the same authinfo file we already created for the mails but this time the parameters will looks like :
+
+#+begin_comment
+machine api.github.com login <user-name>^forge password <password>
+#+end_comment
+
+No port seems required and ‘forge’ is the application name you previously named when creating the token.
+
+Now we should be able to see pull requests from github and to merge them.
