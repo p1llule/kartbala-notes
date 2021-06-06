@@ -358,7 +358,44 @@ and they have teeths!")
                       (smtpmail-smtp-service . 587))))))))
 
 ;; * end
-(provide 'personal_mail)
+(provide 'mu4e-contexts.el)
 #+end_src
 
 Once all these prerequisite are fulfilled, and mu4e is correctly configured in your emacs configuration, now you should have a mu4e working with multiple mail accounts ! \o/
+
+** NEW add faces to the accounts in the header view
+
+Freely readapted from [[https://emacs.stackexchange.com/questions/26913/coloring-mu4e-headers-based-on-title-content#50708][coloring-mu4e-headers-based-on-title-content]].
+
+#+begin_src emacs-lisp
+(defvar mu4e-accounts-colors
+  '(("lazysnail2077@gmail.com" . "green")
+    ("2077snaillazy@gmail.com" . "red")))
+
+(defun mu4e-headers-line-apply-accounts-face (msg line)
+  "Apply a foreground face to the header in function of
+`mu4e-accounts-colors'."
+  ;; loop over the fields
+  ;; so it distincts also
+  ;; our own accounts if
+  ;; ever we send a mail
+  ;; between them
+  (let ((fields '(:from :to :cc :bcc)))
+    (catch 'found
+      (dolist (field fields)
+        ;; found the face
+        (dolist (account mu4e-accounts-colors)
+          (when (mu4e-message-contact-field-matches
+                 msg field
+                 (car account))
+            (add-face-text-property
+             0 (length line)
+             `(:foreground ,(cdr account))
+             t line)
+            (throw 'found t)))))
+    ;; always returns the line
+    line))
+
+(add-to-list 'mu4e~headers-line-handler-functions
+             'mu4e-headers-line-apply-accounts-face)
+#+end_src
