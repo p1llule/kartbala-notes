@@ -1,3 +1,5 @@
+* assisting kartbala in his emacs quest for low vision
+
 This document specify the steps I used to replicate and develop kartabala/emacs. 
 It is a live document meant to be read inside emacs (github.com does not display some blocks and other useful information!) 
 Some of the org-block are meant to be evaluated in emacs with ﴾ C-c C-c \ (org-ctrl-c-ctrl-c) ﴿, to evaluate sh/bash blocks, ob-shell is required. some are meant to be tangled with ﴾ C-c C-v C-t / (org-babel-tangle) ﴿, a block can be tangled alone by adding an universal-argument ﴾ C-u C-c C-v C-t ﴿.
@@ -7,7 +9,7 @@ Some of the org-block are meant to be evaluated in emacs with ﴾ C-c C-c \ (org
 (require 'ob-shell)
 #+end_src
 
-* mail configuration
+** mail configuration
 
 So to get mu4e working I used :
  - a imap client (popular choices are offlineimap or isync) to get mails
@@ -15,7 +17,7 @@ So to get mu4e working I used :
  - a way to specify the authentification (.authinfo.gpg) file
  - a way to protect our authenfification (gpg)
 
-** .offlineimaprc
+*** .offlineimaprc :week1:
 This is a simple offlineimap configuration file, it specifies the accounts, eventually the folders to sync, the passwords and the certificates of the mail provider.
 
 https://stackoverflow.com/questions/24675167/ca-certificates-mac-os-x
@@ -78,10 +80,10 @@ maxconnections = 2
 folderfilter = lambda foldername: foldername not in ['[Gmail]/All Mail']
 #+end_src
 
-** gpg key
+*** gpg key
 Since I rely on encryption to secure my credentials; here a simple memo :
 
-*** NEW creation
+**** creation :week1:
 the simplest way get a pair of gpg key is to create them interactively in a terminal:
 #+begin_src bash :eval no
 gpg2 --full-generate-key
@@ -126,7 +128,7 @@ rm /tmp/crypto
 : gpg: revocation certificate stored as '/tmp/tmp.UdBqBAWACV/openpgp-revocs.d/F3D6DE5627A10F4D8CDAE84CD084633A29F0D54E.rev'
 : gpg: done
 
-*** (optional) sharing our id
+**** (optional) sharing our id :week1:
 now eventually we can declare ourselves to keyservers. This may be helpful for eg signing a FSF assessment.
 
 first check our fingerprint :
@@ -160,11 +162,11 @@ gpg2 --keyserver keys.gnupg.net --search "20642A11"
 
 the server should return the mail address we initially specified.
 
-*** (optional) going beyond
+**** (optional) going beyond :week1:
 This setup may be enhanced by creating a signing subkey and keeping our master key and revocation certificate in, eg a cold storage.
 https://alexcabal.com/creating-the-perfect-gpg-keypair
 
-** authinfo
+*** authinfo :week1:
 [[elisp:(info "(auth) Help for users")][authinfo manual]]
 By creating this file as =~/.authinfo.gpg= with emacs, emacs will automatically recognize it is an encrypted file and ask you which gpg key you wish to use when needed.
 The format of netrc|authinfo file is quite simple when we get it:
@@ -175,7 +177,7 @@ machine imap.gmail.com port 993 login another@mail.net password very-much-secure
 machine smtp.gmail.com port 587 login another@mail.net password very-much-secure-password
 #+end_example
 
-** .offlineimap.py
+*** .offlineimap.py :week1:
 This setup imply to start emacs as a server with emacsclient:
 
 To start an emacsclient session, you can type in a terminal `emacsclient -c -a ""`, or use ~server-start~ from inside an emacs session.
@@ -195,7 +197,7 @@ credits to https://www.emacswiki.org/emacs/OfflineIMAP with little modifications
 	return get_output(cmd).strip().lstrip('"').rstrip('"')
 #+end_src
 
-** offlineimap-get-password
+*** offlineimap-get-password :week1:
 From the offlineimap documentation :
 #+begin_quote
 #    If a matching entry is found in ~/.netrc (see netrc (5) for
@@ -222,7 +224,7 @@ Thankfully to ~netrc.el~, the solution can be abstracted without too much boiler
   (offlineimap-get-password "imap.gmail.com" "lazysnail2077@gmail.com" "993")
 #+end_src
 
-** pittfalls
+*** pittfalls :week1:
 
  - activate IMAP in the gmail settings
  - authorize "the less trusted applications"
@@ -245,7 +247,7 @@ So when using --dry-run to see the mailboxes creations with your =.offlineimaprc
 
 *Always backup your local mailboxes before implementing new configurations!*
 
-** initialize mu
+*** initialize mu :week1:
 
 Once the IMAP client is setup, we can initialize mu.
 #+begin_src sh
@@ -255,7 +257,7 @@ mu init --maildir ~/.mail              \
 mu index
 #+end_src
 
-** contexts
+*** contexts :week1:
 
 mu4e allow to have multiple mail adress in the same setup. It is a good idea to defines these settings in a separate file from your main emacs configuration so it can be easily ignored by git with the =.gitignore= file, eg in ~user-emacs-directory~ =./personal/mu4e-contexts.el=
 
@@ -380,7 +382,7 @@ TODO: refine the gmail integration.
 
 Do we need to set (setq mu4e-sent-messages-behavior 'delete) ?
 
-** NEW add faces to the accounts in the header view
+*** add faces to the accounts in the header view :week2:
 
 Freely readapted from [[https://emacs.stackexchange.com/questions/26913/coloring-mu4e-headers-based-on-title-content#50708][coloring-mu4e-headers-based-on-title-content]].
 
@@ -419,7 +421,7 @@ colors can be introspected with ~list-colors-display~
              'mu4e-headers-line-apply-accounts-face)
 #+end_src
 
-** refile policy
+*** refile policy :week2:
 
 [[info:(info "(mu4e) Smart refiling")][From the mu4e manual]]
 
@@ -449,7 +451,7 @@ The nice thing about the refile policy of mu4e is, it done in elisp and by a fun
            (t  "/archive"))))
 #+end_src
 
-* NEW facilitate code navigation inside emacs
+** facilitate code navigation inside emacs
 
 #+CAPTION: with defaults settings, read may code become difficult.
 [[file:Emacs_1.png]]
@@ -527,7 +529,7 @@ yanking on top of a selection, replace the selection.
 #+CAPTION: with truncated lines, we have to navigate but it may be less confusing anyway.
 [[file:Emacs_2.png]]
 
-** hydra comes to help
+*** hydra comes to help :week2:
 
 ~hydra~ is a popular package that can enhance the emacs interface by increasing the visibility of keybindings and allowing to define different type of behavior for the keys.
 It especially shine when for the keymaps containing repetitive commands such as the rectangle selection one :
@@ -630,7 +632,7 @@ _k_ill _c_heck _r_aiz _D_:nar.def _w_iden
     ("q" nil)))
 #+end_src
 
-** a custom mode-line element
+*** a custom mode-line element :week2:
 
 While looking at these settings I thought it may help to know the level of depth of the point at any moment since we can rarely see the whole expression.
 
@@ -799,8 +801,27 @@ Now we can use it in the default mode-line :
                 mode-line-end-spaces))
 #+end_src
 
-* using git within emacs
-** choosing the right interface                                                              :week3:
+** little tips
+*** using imenu :week3:
+
+[[elisp:(info "(elisp) Imenu")][~imenu~ is a powerful tool.]]
+It can be used with a completion engine to navigate very easily in documents.
+With helm, its integrated command it ~helm-imenu~ that is bound to =C-x c i=.
+
+*** org links :week3:
+
+[[elisp:(info "(org) Hyperlinks")][We start to have a lot of org links in this document.]]
+I use them often to point to the relevant pages of the Info manuals (and that one of the reasons that it is important to read this file inside Emacs).
+To consult them, use =C-c C-o= that runs ~org-open-at-point~.
+
+*** org tags :week3:
+
+I started to tag the org headings to give them a numerated week.
+[[elisp:(info "(org) Tags")][Tags can be used in conjunction of ~org-agenda~ & cie for your own purpose.]]
+There is an useful command to narrow the view to only some tags ~org-sparse-tree~ that is bound to =C-c /=.
+
+** using git within emacs
+*** choosing the right interface :week3:
 
 As we uses git as backend, it needs to be configured with an identity :
 #+BEGIN_SRC sh
@@ -838,7 +859,7 @@ _To get help buffer for the major mode of magit (no prefix map available by defa
 
 That's being say, let's see a basic workflow with ~vc~ :
 
-*** a basic workflow with vc                                                                 :week3:
+**** a basic workflow with vc :week3:
 
 [[elisp:(info "(emacs) Version Control")][vc is documented in the emacs manual]], (not the elisp one).
 
@@ -850,7 +871,7 @@ In a directory under version control,
 
   3. If there are changes on the remote repository, I surely want to pull them and I can use =C-x v += that runs the command ~vc-update~ that is an alias to ~vc-pull~. As usual if there is non commited changes on the directory, we will be warned to commit them before trying to merge the remote changes.
 
-  4. I have non commited changes, I want informations about them, I can use =C-x v ==  runs the command ~vc-diff~.
+  4. I have non commited changes, I want informations about them *--also see 7.!*, I can use =C-x v ==  runs the command ~vc-diff~.
 [[elisp:(info "(emacs) Old Revisions")][vc-diff is documented itself in (emacs) Old Revisions]], while the [[elisp:(info "(emacs) Diff Mode")][the diff mode have its own pages in (emacs) Diff Mode]] and allow to interactively manipulate diff buffers and eg, choose what hunks apply or revert .
     4.1 with =C-c C-a= that runs ~diff-apply-hunk~, I can apply hunks or revert them with =C-u= an ~universal-argument~.
     4.2 with =C-c C-c= that runs ~diff-goto-source~, I can go to the source to modify my change before committing them.
@@ -859,7 +880,7 @@ In a directory under version control,
 
   5. I am done with revising the changes, I want to commit. I can uses the DWIM (Do What I Mean) command =C-x v v= runs the command ~vc-next-action~. I am prompted to commit my changes, I can make my commit and validate it with =C-c C-c= and ask for the next action again with =C-x v v=.
 
-  6. Eventually there is conflicting changes between my local files and the remote one. So =C-x v v= may have triggered the command =C-x v m= ~vc-merge~. At this point I think Emacs put automatically the targeted files in ~smerge-mode~ that enable a special view and commands. I did not find much information about it in the manual but  [[elisp:(describe-function 'smerge-mode)][asking to describe the function will show you informations about its keymap]] and
+  6. Eventually there will be conflicting changes between my local files and the remote one. So =C-x v v= may have triggered the command =C-x v m= ~vc-merge~. At this point I think Emacs put automatically the targeted files in ~smerge-mode~ that enable a special view and commands. I did not find much information about it in the manual but  [[elisp:(describe-function 'smerge-mode)][asking to describe the function will show you informations about its keymap]] and
     6.1 we can quickly choose what hunks to keep with =C-c ^ u= ~smerge-keep-upper~
     6.2 =C-c ^ l= ~smerge-keep-lower~
     6.3 and going directly to the next conflict with =C-c ^ n= ~smerge-next~. Note that there is more commands and I should spend a little more time to understand them.
@@ -869,8 +890,7 @@ In a directory under version control,
 
   8. After committed new changes again, I want to push my locals changes to the remote repository. I can use =C-x v O= that runs ~vc-log-outgoing~ to see what will be done by =C-x v P= that runs ~vc-push~.
 
-
-** (a bit more involved) integration with the forges
+*** (a bit more involved) integration with the forges
 
 But we may also install the ~forge~ package to get a more complete integration with specific forges as github to being able to eg, make a pull request to a repository and merge one.
 
@@ -891,3 +911,9 @@ machine api.github.com login <user-name>^forge password <password>
 No port seems required and ‘forge’ is the application name you previously named when creating the token.
 
 Now we should be able to see pull requests from github and to merge them.
+
+** local variables
+
+# Local Variables:
+# org-tags-column: 0
+# End:
