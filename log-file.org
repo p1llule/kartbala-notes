@@ -91,6 +91,10 @@ gpg2 --full-generate-key
 
 And that is pretty all with gpg alone, now we can uses this key inside emacs and with other softwares.
 
+*this didn't worked*
+
+**** in batch mode :week2:
+
 Unfortunately maybe your terminal or emacs is not able on your computer to use your graphical server to ask passwords, so you may need to create a key in batch mode instead :
 
 #+begin_src bash :results pp
@@ -127,6 +131,24 @@ rm /tmp/crypto
 : gpg: directory '/tmp/tmp.UdBqBAWACV/openpgp-revocs.d' created
 : gpg: revocation certificate stored as '/tmp/tmp.UdBqBAWACV/openpgp-revocs.d/F3D6DE5627A10F4D8CDAE84CD084633A29F0D54E.rev'
 : gpg: done
+
+*this didn't worked*
+Big sur was complaining about more parameters :/
+
+**** again interactively :week3:
+
+So I figured out that if it didn't worked interactively the first time, it was because its computer was lacking a pinentry package such as ~pinentry-mac~ after installing it, it still didn't worked neither.
+
+[[https://stackoverflow.com/questions/41502146/git-gpg-onto-mac-osx-error-gpg-failed-to-sign-the-data][I think it may be about the =gpg.conf= file.]]
+
+#+begin_src sh
+echo "pinentry-program /usr/local/bin/pinentry-mac" >> ~/.gnupg/gpg-agent.conf
+test -r ~/.zshrc && echo 'export GPG_TTY=$(tty)' >> ~/.zshrc
+echo 'export GPG_TTY=$(tty)' >> ~/.profile
+#+end_src
+
+And eventually need to ‘source ~/.zshrc’ to get updated a current session.
+*And eventually need to reboot*
 
 **** (optional) sharing our id :week1:
 now eventually we can declare ourselves to keyservers. This may be helpful for eg signing a FSF assessment.
@@ -829,7 +851,7 @@ git config --global user.name "my full name"
 git config --global user.email "my.address@somemail.com"
 #+END_SRC
 
-Also it may be worthwhile to add this snippet in ~/.bashrc or ~/.zhsrc to specify to our shell that we want him to uses ~emacsclient~ when, eg, committing changes with git. Since we have already put in the init file (server-start), the server should be running and this should work at expected.
+Also it may be worthwhile to add this snippet in ~/.bashrc or ~/.zshrc to specify to our shell that we want him to uses ~emacsclient~ when, eg, committing changes with git. Since we have already put in the init file (server-start), the server should be running and this should work at expected.
 
 #+begin_src bash
 if [ -n "$ZSH_VERSION" ]; then emulate -L sh; fi
