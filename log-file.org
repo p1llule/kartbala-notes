@@ -25,8 +25,7 @@ It seems there is two ways to get the certificate on macos:
 
 The password can be specified in plain text inside this document with a `remotepass = <password>` instead of the `remotepasseval = <pythonfunc(args)>, it is useful to do so when testing the file, once it is done,  I implemented a more secure way to store them.
 
-synclabels = yes
-labelsheader = X-Keywords
+Gmail have a particular way to rely on labels and this may leads to a massive duplication of emails in your IMAP folder. [[https://mail.google.com/mail/u/0/#settings/labels][Please adjust the labels accordingly]].
 
 #+begin_src conf :tangle ~/.offlineimaprc
 [general]
@@ -93,6 +92,8 @@ And that is pretty all with gpg alone, now we can uses this key inside emacs and
 Unfortunately maybe your terminal or emacs is not able on your computer to use your graphical server to ask passwords, so you may need to create a key in batch mode instead :
 
 #+begin_src bash :results pp
+# temporary prevent history
+unset HISTFILE
 # comment the next line to make a durable key
 export GNUPGHOME="$(mktemp -d)"
 # create a specification file in /tmp/crypto
@@ -102,7 +103,7 @@ cat > /tmp/crypto <<EOF
      Key-Length: 4096
      Subkey-Type: default
      Subkey-Length: 4096
-     Name-Real: John Doe
+     Name-Real: John Duh
      Name-Comment: eventually
      Name-Email: mymail@gmail.com.
      Expire-Date: 0
@@ -113,17 +114,16 @@ EOF
 # redirection only to get the output in org-mode
 2<&1 gpg --batch --generate-key /tmp/crypto
 # clear your traces.
-# Maybe clear your shell history also
 rm /tmp/crypto
 #+end_src
 
 #+RESULTS:
-: gpg: keybox '/tmp/tmp.hsDX3ATkaU/pubring.kbx' created
+: gpg: keybox '/tmp/tmp.UdBqBAWACV/pubring.kbx' created
 : gpg: Generating a basic OpenPGP key
-: gpg: /tmp/tmp.hsDX3ATkaU/trustdb.gpg: trustdb created
-: gpg: key 826BDB0F4B39DA6C marked as ultimately trusted
-: gpg: directory '/tmp/tmp.hsDX3ATkaU/openpgp-revocs.d' created
-: gpg: revocation certificate stored as '/tmp/tmp.hsDX3ATkaU/openpgp-revocs.d/A658553F17EC9BDFD197CB7D826BDB0F4B39DA6C.rev'
+: gpg: /tmp/tmp.UdBqBAWACV/trustdb.gpg: trustdb created
+: gpg: key D084633A29F0D54E marked as ultimately trusted
+: gpg: directory '/tmp/tmp.UdBqBAWACV/openpgp-revocs.d' created
+: gpg: revocation certificate stored as '/tmp/tmp.UdBqBAWACV/openpgp-revocs.d/F3D6DE5627A10F4D8CDAE84CD084633A29F0D54E.rev'
 : gpg: done
 
 *** (optional) sharing our id
@@ -174,6 +174,7 @@ machine smtp.gmail.com port 587 login this.is@mail.net password very-secure-pass
 machine imap.gmail.com port 993 login another@mail.net password very-much-secure-password
 machine smtp.gmail.com port 587 login another@mail.net password very-much-secure-password
 #+end_example
+
 ** .offlineimap.py
 This setup imply to start emacs as a server with emacsclient:
 
@@ -193,6 +194,7 @@ credits to https://www.emacswiki.org/emacs/OfflineIMAP with little modifications
 	cmd = "emacsclient --eval '(offlineimap-get-password \"%s\" \"%s\" \"%s\")'" % (host,user,port)
 	return get_output(cmd).strip().lstrip('"').rstrip('"')
 #+end_src
+
 ** offlineimap-get-password
 From the offlineimap documentation :
 #+begin_quote
@@ -219,6 +221,7 @@ Thankfully to ~netrc.el~, the solution can be abstracted without too much boiler
 
   (offlineimap-get-password "imap.gmail.com" "lazysnail2077@gmail.com" "993")
 #+end_src
+
 ** pittfalls
 
  - activate IMAP in the gmail settings
@@ -376,7 +379,6 @@ Once all these prerequisite are fulfilled, and mu4e is correctly configured in y
 TODO: refine the gmail integration.
 
 Do we need to set (setq mu4e-sent-messages-behavior 'delete) ?
-
 
 ** NEW add faces to the accounts in the header view
 
@@ -628,20 +630,219 @@ _k_ill _c_heck _r_aiz _D_:nar.def _w_iden
     ("q" nil)))
 #+end_src
 
-* using git within emacs
+** a custom mode-line element
 
+While looking at these settings I thought it may help to know the level of depth of the point at any moment since we can rarely see the whole expression.
+
+First I must backport the ~up-list~ of emacs 28 since I use it especially :
+#+begin_src emacs-lisp
+;; backporting the version 28 of up-list
+(defun pils-up-list_28 (&optional arg escape-strings no-syntax-crossing)
+  "Move forward out of one level of parentheses.
+This command will also work on other parentheses-like expressions
+defined by the current language mode.  With ARG, do this that
+many times.  A negative argument means move backward but still to
+a less deep spot.  If ESCAPE-STRINGS is non-nil (as it is
+interactively), move out of enclosing strings as well.  If
+NO-SYNTAX-CROSSING is non-nil (as it is interactively), prefer to
+break out of any enclosing string instead of moving to the start
+of a list broken across multiple strings.  On error, location of
+point is unspecified."
+  (interactive "^p\nd\nd")
+  (or arg (setq arg 1))
+  (let ((inc (if (> arg 0) 1 -1))
+        (pos nil))
+    (while (/= arg 0)
+      (condition-case err
+          (save-restriction
+            ;; If we've been asked not to cross string boundaries
+            ;; and we're inside a string, narrow to that string so
+            ;; that scan-lists doesn't find a match in a different
+            ;; string.
+            (when no-syntax-crossing
+              (let* ((syntax (syntax-ppss))
+                     (string-comment-start (nth 8 syntax)))
+                (when string-comment-start
+                  (save-excursion
+                    (goto-char string-comment-start)
+                    (narrow-to-region
+                     (point)
+                     (if (nth 3 syntax) ; in string
+                         (condition-case nil
+                             (progn (forward-sexp) (point))
+                           (scan-error (point-max)))
+                       (forward-comment 1)
+                       (point)))))))
+            (if (null forward-sexp-function)
+                (goto-char (or (scan-lists (point) inc 1)
+                               (buffer-end arg)))
+              (condition-case err
+                  (while (progn (setq pos (point))
+                                (forward-sexp inc)
+                                (/= (point) pos)))
+                (scan-error (goto-char (nth (if (> arg 0) 3 2) err))))
+              (if (= (point) pos)
+                  (signal 'scan-error
+                          (list "Unbalanced parentheses" (point) (point))))))
+        (scan-error
+         (let ((syntax nil))
+           (or
+            ;; If we bumped up against the end of a list, see whether
+            ;; we're inside a string: if so, just go to the beginning
+            ;; or end of that string.
+            (and escape-strings
+                 (or syntax (setf syntax (syntax-ppss)))
+                 (nth 3 syntax)
+                 (goto-char (nth 8 syntax))
+                 (progn (when (> inc 0)
+                          (forward-sexp))
+                        t))
+            ;; If we narrowed to a comment above and failed to escape
+            ;; it, the error might be our fault, not an indication
+            ;; that we're out of syntax.  Try again from beginning or
+            ;; end of the comment.
+            (and no-syntax-crossing
+                 (or syntax (setf syntax (syntax-ppss)))
+                 (nth 4 syntax)
+                 (goto-char (nth 8 syntax))
+                 (or (< inc 0)
+                     (forward-comment 1))
+                 (setf arg (+ arg inc)))
+            (if no-syntax-crossing
+                ;; Assume called interactively; don't signal an error.
+                (user-error "At top level")
+              (signal (car err) (cdr err)))))))
+      (setq arg (- arg inc)))))
+#+end_src
+
+Next I created a quick prototype to get the depth of the parenthesis. I should probably use ~scan-lists or something instead of ~up-list~...
+#+begin_src emacs-lisp
+(defun pils/list-depth ()
+  "Count the list depth from point to the top level,
+`message' it in interactive calls, update the mode-line otherwise,
+in both cases, save the depth in `pils--list-depth-cache'."
+  (interactive)
+  (save-mark-and-excursion
+    (let ((depth 0)
+          (bounds (bounds-of-thing-at-point 'defun))
+          deactivate-mark
+          check-parens)
+      (catch 'depth
+
+        (condition-case err
+            (when bounds
+              (scan-sexps (car bounds) (cdr bounds)))
+          (scan-error (throw 'depth (setq depth nil))))
+
+        (condition-case err
+            (while t
+              (pils-up-list_28 nil 'escape-string 'no-syntax-crossing)
+              (cl-incf depth))
+          (user-error (throw 'depth depth))))
+
+      (when (interactive-p)
+        (message "list depth: %s" depth))
+      (setq pils--list-depth-cache depth)
+      (force-mode-line-update))))
+#+end_src
+
+Then we want to run this only at quiet pace, so while creating the mode line element, I slow it with a timer and a cache.
+#+begin_src
+(defvar-local pils--list-depth-cache nil
+  "Dummy variable to store the return
+value of `pils/list-depth'.")
+
+(defvar pils--list-depth-timer
+  (timer-create)
+  "Timer to update the list depth
+element of the modeline at a
+relatively quiet pace.")
+
+(defun pils--modeline-list-depth ()
+  "Return the list depth when in
+`emacs-lisp-mode', via the timer
+`pils--list-depth-timer' every
+0.2 seconds."
+  (if (memq major-mode '(emacs-lisp-mode
+                         lisp-interaction-mode))
+      (progn
+        (when (not
+               (timerp pils--list-depth-timer))
+          (setq pils--list-depth-timer
+                (run-with-timer
+                 0.2 0.2
+                 #'pils/list-depth)))
+        (format " (%s) " pils--list-depth-cache))
+    (when (timerp pils--list-depth-timer)
+      (cancel-timer pils--list-depth-timer)
+      (setq pils--list-depth-timer nil)
+      (setq pils--list-depth-cache nil))
+    ""))
+#+end_src
+
+Now we can use it in the default mode-line :
+#+begin_src
+(setq-default mode-line-format
+              '("%e" mode-line-front-space
+                mode-line-mule-info
+                mode-line-client
+                mode-line-modified
+                mode-line-remote
+                mode-line-frame-identification
+                mode-line-buffer-identification
+                "%l-%c"
+                (:eval (pils--modeline-list-depth))
+                (vc-mode vc-mode)
+                " "
+                mode-line-modes
+                mode-line-misc-info
+                mode-line-end-spaces))
+#+end_src
+
+* using git within emacs
+** choosing the right interface                                                              :week3:
 As we uses git as backend, it needs to be configured with an identity :
 #+BEGIN_SRC sh
 git config --global user.name "my full name"
 git config --global user.email "my.address@somemail.com"
 #+END_SRC
 
-Besides the built-in VC system, Emacs have a really popular package named ~Magit~.
-#+begin_src
-(use-package magit)
-#+end_src
+Emacs have natively the vc library and, indeed, Magit is very popular these days.
 
-From here we can already commit/push/pull from a remote repository.
+Magit with its transient interface, is maybe more difficult to apprehend when the instruction does not fit the window and the way to get its binding in a non-transient buffer it to ask for the help of the major mode, or to consult its manual, eg :
+
+_To get help buffer for prefix map of vc_, Start typing =C-x v= then =C-h=
+
+_To get help buffer for the major mode of magit (no prefix map available by default)_, Start typing =C-x g= then =C-h m=.
+
+#+CAPTION: Magit and its transient map are not the most accessible interface
+[[file:Emacs_3.png]]
+
+[[https://github.com/magit/magit/issues/4408][I started an issue at this subject.]]
+
+*** a basic workflow with vc                                                                 :week3:
+
+That being say, let's focus on ~vc~ ; [[elisp:(info "(emacs) Version Control")][it is documented in the emacs manual]], (not the elisp one).
+
+~vc~ is a library that can be used with many others version control software, not only git.
+
+That's being say, let's see a basic workflow with ~vc~ :
+
+In a directory under version control,
+
+  1. At any time, I can use =C-x v l= that runs the command ~vc-print-log~ to see the logs of the version control system. In this buffer I can get informations about the bindings available with =C-x h m= or simply =?=. A notable command here is === that run ~log-view-diff= on the commit at point.
+
+  2. =C-x v += runs the command ~vc-update~ that is an alias to ~vc-pull~ to fetch and merge the changes of the remote repository.
+    As usual if there is non commited changes on the directory, we will be warned to commit them before trying to merge the remote changes.
+
+  3. I have non commited changes, I want informations about them, I can use =C-x v == runs the command ~vc-diff~ [[elisp:(info "(emacs) Old Revisions")][documented itself in (emacs) Old Revisions]], while the [[elisp: (info "(emacs) Diff Mode")][the diff mode have its own pages in (emacs) Diff Mode]] and allow to interactively manipulate diff buffers and eg, choose what hunks apply or revert.
+
+  4. I am done with revising the changes, I want to commit. I can uses the DWIM (Do What I Mean) command =C-x v v= runs the command ~vc-next-action~.
+    I am prompted to commit my changes, I can make my commit and validate it with =C-c C-c= and ask for the next action again with =C-x v v=.
+
+  5 Eventually there is conflicting changes between my local files and the remote one. So =C-x v v= may have triggered the command =C-x v m= ~vc-merge~. At this point I think Emacs put automatically the targeted files in ~smerge-mode~ that enable a special view and commands. I did not find much information about it in the manual but  [[elisp:(describe-function 'smerge-mode)][asking to describe the function will show you informations about its keymap]] and we can quickly choose what hunks to keep with =C-c ^ u= ~smerge-keep-upper~, =C-c ^ l= ~smerge-keep-lower~ and going directly to the next conflict with =C-c ^ n= ~smerge-next~. Note that there is more commands and I should spend a little more time to understand them.
+
+  6. now that the conflicts are resolved
 
 ** (a bit more involved) integration with the forges
 
