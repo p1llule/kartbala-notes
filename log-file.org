@@ -484,19 +484,29 @@ Continue wrapped words at whitespace, rather than in the middle of a word.
 (setq-default word-wrap t)
 #+end_src
 
-...but don't do any wrapping by default. It's expensive. Enable ~visual-line-mode~ if you want soft line-wrapping. ~auto-fill-mode~ for hard line-wrapping.
+Does not wrap by default in prog-mode the reasonning is, in several prog-mode, having emacs displaying the same line on multiple lines is confusing.
+eg: a comment. comments usually start with an identifier like ;; for elisp so you have extra effort to understand what are the commented lines or not.
 
+Also indentation may be critical and again, filling the lines doesn't help to understand or worse and may be dangerous for the soft, eg: python
+
+On the other hand, in all others cases, displaying multiples lines when needed to fit visually a single line, actually helps a lot to the readability. Even in non text-mode; think trying to read an error log from a shell output. Reading error logs is already not an agreeable experience but if you have to scroll horizontally for each line that is worse. Fortunately, the interactive shell is not a prog-mode.
+
+Finally when you cannot select the buffer displaying the infos, you *need* to emacs to display the multilines, otherwise you never read the line ! That is the case when, eg, a function uses a read command.
 #+begin_src emacs-lisp
-(setq-default truncate-lines t)
+(defun pils-truncate-lines ()
+  (setq truncate-lines t))
+
+(add-hook 'prog-mode-hook #'pils-truncate-lines)
+(add-hook 'text-mode-hook #'pils-truncate-lines)
 #+end_src
 
- If enabled (and `truncate-lines' was disabled), soft wrapping no longer occurs when that window is less than `truncate-partial-width-windows' characters wide. We don't need this, and it's extra work for Emacs otherwise, so off it goes.
+If enabled (and `truncate-lines' was disabled), soft wrapping no longer occurs when that window is less than `truncate-partial-width-windows' characters wide. We don't need this, and it's extra work for Emacs otherwise, so off it goes.
 
 #+begin_src emacs-lisp
 (setq truncate-partial-width-windows nil)
 #+end_src
 
-Activate the visual-line-mode in all mode derived from the major-mode text-mode.
+Activate the ~visual-line-mode~ in all mode derived from the ~text-mode~.
 
 #+begin_src emacs-lisp
 (add-hook 'text-mode-hook #'visual-line-mode)
@@ -656,9 +666,9 @@ _k_ill _c_heck _r_aiz _D_:nar.def _w_iden
 
 *** a custom mode-line element :week2:
 
-While looking at these settings I thought it may help to know the level of depth of the point at any moment since we can rarely see the whole expression.
+While looking at these settings I thought it may help to know the level of depth of the point at any moment since we can rarely rely on seeing the whole expression.
 
-I created a quick prototype to get the depth of the parenthesis. I should probably use ~scan-lists~ or something instead of ~up-list~
+I created a quick prototype to get the depth of the parenthesis. I should probably use ~scan-lists~ directly instead of ~up-list~.
 
 Note that version will only work on emacs 27, to get it working on emacs 28, one should replace
 
@@ -799,7 +809,7 @@ git config --global user.name "my full name"
 git config --global user.email "my.address@somemail.com"
 #+END_SRC
 
-Also it may be worthwhile to add this snippet in ~/.bashrc or ~/.zshrc to specify to our shell that we want him to uses ~emacsclient~ when, eg, committing changes with git. Since we have already put in the init file (server-start), the server should be running and this should work at expected.
+Also it may be worthwhile to add this snippet in =~/.bashrc= or =~/.zshrc= to specify to our shell that we want him to uses ~emacsclient~ when, eg, committing changes with git. Since we have already put in the init file (server-start), the server should be running and this should work at expected.
 
 #+begin_src bash
 if [ -n "$ZSH_VERSION" ]; then emulate -L sh; fi
@@ -814,13 +824,13 @@ fi
 
 Emacs have natively the vc library and, indeed, Magit is very popular these days.
 
-Magit with its transient interface, is maybe more difficult to apprehend when the instruction does not fit the window and the way to get its binding in a non-transient buffer it to ask for the help of the major mode, or to consult its manual, eg :
+Magit with its transient interface, is maybe more difficult to apprehend when the instructions does not fit the window and the way to get its binding in a non-transient buffer it to ask for the help of the major mode, or to consult its manual, eg :
 
 _To get help buffer for prefix map of vc_, Start typing =C-x v= then =C-h=
 
 _To get help buffer for the major mode of magit (no prefix map available by default)_, Start typing =C-x g= then =C-h m=.
 
-#+CAPTION: Magit and its transient map are not the most accessible interface
+#+CAPTION: Magit and its transient maps are not the most accessible interface
 [[file:Emacs_3.png]]
 
 [[https://github.com/magit/magit/issues/4408][I started an issue at this subject.]]
@@ -829,7 +839,7 @@ _To get help buffer for the major mode of magit (no prefix map available by defa
 
 That's being say, let's see a basic workflow with ~vc~ :
 
-**** a basic workflow with vc :week3:
+*** trying a basic workflow with vc :week3:
 
 [[elisp:(info "(emacs) Version Control")][vc is documented in the emacs manual]], (not the elisp one).
 
@@ -850,9 +860,9 @@ In a directory under version control,
 
   5. I am done with revising the changes, I want to commit. I can uses the DWIM (Do What I Mean) command =C-x v v= runs the command ~vc-next-action~. I am prompted to commit my changes, I can make my commit and validate it with =C-c C-c= and ask for the next action again with =C-x v v=.
 
-  6. Eventually there will be conflicting changes between my local files and the remote one. So =C-x v v= may have triggered the command =C-x v m= ~vc-merge~. At this point I think Emacs put automatically the targeted files in ~smerge-mode~ that enable a special view and commands. I did not find much information about it in the manual but  [[elisp:(describe-function 'smerge-mode)][asking to describe the function will show you informations about its keymap]] and
+  6. Eventually there will be conflicting changes between my local files and the remote one. So =C-x v v= may have triggered the command =C-x v m= ~vc-merge~. At this point I think Emacs put automatically the targeted files in ~smerge-mode~ that enable a special view and commands. I did not find much information about it in the manual but  [[elisp:(describe-function 'smerge-mode)][asking to describe the function will show you informations about its keymap]]
     6.1 we can quickly choose what hunks to keep with =C-c ^ u= ~smerge-keep-upper~
-    6.2 =C-c ^ l= ~smerge-keep-lower~
+    6.2 or =C-c ^ l= ~smerge-keep-lower~
     6.3 and going directly to the next conflict with =C-c ^ n= ~smerge-next~. Note that there is more commands and I should spend a little more time to understand them.
   When done =C-x v += should respond we are up to date.
 
@@ -860,7 +870,7 @@ In a directory under version control,
 
   8. After committed new changes again, I want to push my locals changes to the remote repository. I can use =C-x v O= that runs ~vc-log-outgoing~ to see what will be done by =C-x v P= that runs ~vc-push~.
 
-Also and overall I didn't find ~vc~ commands to manipulate branch so I assume again we should use the command line for that.
+Also and overall I didn't find ~vc~ commands to manipulate branches so I assume again we should use the command line for that.
 
 *** (a bit more involved) integration with the forges
 
