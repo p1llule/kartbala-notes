@@ -801,11 +801,25 @@ Now we can use it in the default mode-line :
 
 * using git within emacs
 ** choosing the right interface                                                              :week3:
+
 As we uses git as backend, it needs to be configured with an identity :
 #+BEGIN_SRC sh
 git config --global user.name "my full name"
 git config --global user.email "my.address@somemail.com"
 #+END_SRC
+
+Also it may be worthwhile to add this snippet in ~/.bashrc or ~/.zhsrc to specify to our shell that we want him to uses ~emacsclient~ when, eg, committing changes with git. Since we have already put in the init file (server-start), the server should be running and this should work at expected.
+
+#+begin_src bash
+if [ -n "$ZSH_VERSION" ]; then emulate -L sh; fi
+
+if [ -z "${EDITOR}" ] ; then
+  export EDITOR='emacsclient'
+fi
+if [ -n "${EDITOR}" ] && [ -z "${VISUAL}" ] ; then
+  export VISUAL="${EDITOR}"
+fi
+#+end_src
 
 Emacs have natively the vc library and, indeed, Magit is very popular these days.
 
@@ -820,29 +834,41 @@ _To get help buffer for the major mode of magit (no prefix map available by defa
 
 [[https://github.com/magit/magit/issues/4408][I started an issue at this subject.]]
 
-*** a basic workflow with vc                                                                 :week3:
-
-That being say, let's focus on ~vc~ ; [[elisp:(info "(emacs) Version Control")][it is documented in the emacs manual]], (not the elisp one).
-
-~vc~ is a library that can be used with many others version control software, not only git.
+~vc~ is a library that can be used with many others version control software, not only git, and have less commands for git.
 
 That's being say, let's see a basic workflow with ~vc~ :
 
+*** a basic workflow with vc                                                                 :week3:
+
+[[elisp:(info "(emacs) Version Control")][vc is documented in the emacs manual]], (not the elisp one).
+
 In a directory under version control,
 
-  1. At any time, I can use =C-x v l= that runs the command ~vc-print-log~ to see the logs of the version control system. In this buffer I can get informations about the bindings available with =C-x h m= or simply =?=. A notable command here is === that run ~log-view-diff= on the commit at point.
+  1. At any time, I can use =C-x v l= that runs the command ~vc-print-log~ to see the locals logs of the version control system. In this buffer I can get informations about the bindings available with =C-x h m= or simply =?=. A notable command here is === that run ~log-view-diff= on the commit at point.
 
-  2. =C-x v += runs the command ~vc-update~ that is an alias to ~vc-pull~ to fetch and merge the changes of the remote repository.
-    As usual if there is non commited changes on the directory, we will be warned to commit them before trying to merge the remote changes.
+  2. I want to check the changes of the remote repository, I can use =C-x v I= that runs ~vc-log-incoming~ to see what they are (maybe none).
 
-  3. I have non commited changes, I want informations about them, I can use =C-x v == runs the command ~vc-diff~ [[elisp:(info "(emacs) Old Revisions")][documented itself in (emacs) Old Revisions]], while the [[elisp: (info "(emacs) Diff Mode")][the diff mode have its own pages in (emacs) Diff Mode]] and allow to interactively manipulate diff buffers and eg, choose what hunks apply or revert.
+  3. If there are changes on the remote repository, I surely want to pull them and I can use =C-x v += that runs the command ~vc-update~ that is an alias to ~vc-pull~. As usual if there is non commited changes on the directory, we will be warned to commit them before trying to merge the remote changes.
 
-  4. I am done with revising the changes, I want to commit. I can uses the DWIM (Do What I Mean) command =C-x v v= runs the command ~vc-next-action~.
-    I am prompted to commit my changes, I can make my commit and validate it with =C-c C-c= and ask for the next action again with =C-x v v=.
+  4. I have non commited changes, I want informations about them, I can use =C-x v ==  runs the command ~vc-diff~.
+[[elisp:(info "(emacs) Old Revisions")][vc-diff is documented itself in (emacs) Old Revisions]], while the [[elisp:(info "(emacs) Diff Mode")][the diff mode have its own pages in (emacs) Diff Mode]] and allow to interactively manipulate diff buffers and eg, choose what hunks apply or revert .
+    4.1 with =C-c C-a= that runs ~diff-apply-hunk~, I can apply hunks or revert them with =C-u= an ~universal-argument~.
+    4.2 with =C-c C-c= that runs ~diff-goto-source~, I can go to the source to modify my change before committing them.
+    4.3 with =g= that runs ~revert-buffer~, I can actualise the buffer with the new changes applied.
+    4.4 with =C-x 4 A=, I can generate a changelog entry to later use in the commit message.
 
-  5 Eventually there is conflicting changes between my local files and the remote one. So =C-x v v= may have triggered the command =C-x v m= ~vc-merge~. At this point I think Emacs put automatically the targeted files in ~smerge-mode~ that enable a special view and commands. I did not find much information about it in the manual but  [[elisp:(describe-function 'smerge-mode)][asking to describe the function will show you informations about its keymap]] and we can quickly choose what hunks to keep with =C-c ^ u= ~smerge-keep-upper~, =C-c ^ l= ~smerge-keep-lower~ and going directly to the next conflict with =C-c ^ n= ~smerge-next~. Note that there is more commands and I should spend a little more time to understand them.
+  5. I am done with revising the changes, I want to commit. I can uses the DWIM (Do What I Mean) command =C-x v v= runs the command ~vc-next-action~. I am prompted to commit my changes, I can make my commit and validate it with =C-c C-c= and ask for the next action again with =C-x v v=.
 
-  6. now that the conflicts are resolved
+  6. Eventually there is conflicting changes between my local files and the remote one. So =C-x v v= may have triggered the command =C-x v m= ~vc-merge~. At this point I think Emacs put automatically the targeted files in ~smerge-mode~ that enable a special view and commands. I did not find much information about it in the manual but  [[elisp:(describe-function 'smerge-mode)][asking to describe the function will show you informations about its keymap]] and
+    6.1 we can quickly choose what hunks to keep with =C-c ^ u= ~smerge-keep-upper~
+    6.2 =C-c ^ l= ~smerge-keep-lower~
+    6.3 and going directly to the next conflict with =C-c ^ n= ~smerge-next~. Note that there is more commands and I should spend a little more time to understand them.
+  When done =C-x v += should respond we are up to date.
+
+  7. Here I am a little bit confused about ~vc~ and its git integration, ~vc~ prompted me to commit changes at step 4. but now if I do changes again, I see no exposed commands to stage and commit them. So I need to do that from a shell with ‘git stage’ and ‘git commit -a’.
+
+  8. After committed new changes again, I want to push my locals changes to the remote repository. I can use =C-x v O= that runs ~vc-log-outgoing~ to see what will be done by =C-x v P= that runs ~vc-push~.
+
 
 ** (a bit more involved) integration with the forges
 
