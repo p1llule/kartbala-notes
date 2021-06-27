@@ -17,6 +17,192 @@ So to get mu4e working I used :
  - a way to specify the authentification (.authinfo.gpg) file
  - a way to protect our authenfification (gpg)
 
+*** mu4e package declaration :week1:
+
+I used an use-package declaration to install ~mu4e~. If you have it installed (you may have to install it via your package manager or compile ~mu~), it should work out of the box after you set in the load-path, the maildir, the mu4e info dir, and the mu binary ; You can ignore for now the mu4e-contexts, it will not throw an error for it.
+
+#+begin_src emacs-lisp
+;; * Email
+;; ** authentification
+;; emacs document its authentification
+;; mechanisms at --evaluate it-- :
+;; (info "(auth) Help for users")
+;; In a nutshell, credentials can be
+;; stored in .authinfo or .netrc
+;; it can be encrypted
+;; and elisp programs can query it.
+;; I used to specify the passwords
+;; myself, so don't ask to save it.
+(setq auth-source-save-behavior nil)
+;; offlineimap will use emacs as a
+;; client, we need to start the server.
+(server-start)
+;; ** mu4e package declaration
+(use-package mu4e
+    :ensure nil
+    :load-path (expand-file-name "<path to the elips mu4e library>")
+;; ** mu4e custom variables
+    :custom
+;; I think if you want multiple accounts it is:
+;; simply, a directory, eg : "~/Maildir/"
+    (mu4e-maildir (expand-file-name "<path to your maildir>"  ))
+    (mu4e-mu-binary (expand-file-name "<path to the mu executable>" ))
+    (Info-directory-list (add-to-list 'Info-directory-list
+                                      (expand-file-name "<path to the mu4e info dir>")))
+;; *** crypto
+;; do you want to sign messages with pgp ?
+    ;; (setq mu4e-compose-crypto-reply-policy 'sign-and-encrypt)
+    (mml-secure-openpgp-sign-with-sender t)
+    (mml-secure-openpgp-encrypt-to-self t)
+;; *** be nice for the imap indexer
+    (mu4e-compose-dont-reply-to-self t)
+    (mu4e-change-filenames-when-moving t)
+;; *** Fetching mail
+    ;; the debian stable mu is buggy,
+    ;; just verify it works reliably.
+    (mu4e-get-mail-command "offlineimap")
+;; *** Message view
+    ;; nil to display only the headers
+    ;; or the message at once
+    (mu4e-split-view 'single-window)
+    ;; this is more promising
+    (mu4e-view-use-gnus t)
+    (mu4e-headers-include-related t)
+    (mu4e-headers-skip-duplicates t)
+    (mu4e-headers-show-threads nil)
+    (mu4e-view-show-addresses t)
+    (mu4e-headers-fields
+     '((:human-date . 8)
+       (:from . 16)
+       (:subject)))
+    ;; americans will agree ?
+    (mu4e-headers-date-format "%d/%m/%Y")
+    (mu4e-headers-time-format "%H:%M")
+    ;; enable notifications
+    (mu4e-enable-mode-line t)
+    ;; try to show images ?
+    (mu4e-view-show-images t)
+    (mu4e-view-image-max-width 800)
+    ;; plain text messages
+    ;; (setq mu4e-view-html-plaintext-ratio-heuristic most-positive-fixnum)
+;; *** context policy
+    ;; start with the first context
+    ;; the contexts themselves will
+    ;; be defined later
+    (mu4e-context-policy 'pick-first)
+    (mu4e-compose-context-policy 'automatic)
+    ;; set mail user agent globally
+    ;; for emacs so it is reconized for
+    ;; eg send a bug report
+    (mail-user-agent 'mu4e-user-agent)
+;; *** sent message behavior
+    ;; note this is mostly for gmail because
+    ;; it already save all sent messages
+    ;; we may want tune it
+    ;; specifically by context
+    (mu4e-sent-messages-behavior 'delete)
+;; *** wrapping message body
+;; visual-line-mode + auto-fill upon sending
+    ;; autofill may be annoying though
+    ;; also I have a known bug with it
+    (mu4e-compose-format-flowed nil)
+;; *** Autocomplete addresses
+    (mu4e-compose-complete-addresses t)
+    (mu4e-compose-complete-only-after "2020-01-01")
+    (mu4e-compose-complete-only-personal t)
+;; *** misc
+    (mu4e-attachment-dir "~/Downloads")
+    ;; don't keep message buffers around
+    (message-kill-buffer-on-exit t)
+    ;; use TAB and <backtab> to jump to links
+    ;; works well with gnus-view
+    (with-eval-after-load 'mu4e-view
+      (set-keymap-parent mu4e-view-mode-map button-buffer-map))
+    ;; must mu4e be verbose ?
+    (mu4e-hide-index-messages t)
+;; ** mu4e configurations
+    :config
+    ;; display message in a browser
+    (add-to-list 'mu4e-view-actions
+                 '("browser" . mu4e-action-view-in-browser) t)
+    ;; update the database every ten minutes.
+    (setq mu4e-update-interval 600)
+    ;; load the differents contexts
+    (or (require 'mu4e-personal-context nil t)
+        (warn "mu4e-personal-context.el not found"))
+;; ** mu4e patch
+    ;; make the call to mu4e more DWIM
+    ;; by calling the dispatch menu again
+    ;; when we already see the headers
+    (advice-add 'mu4e~main-view :override
+            (defun patch-mu4e~main-view (&optional refresh)
+  "Create the mu4e main-view, and switch to it.
+
+When REFRESH is non nil refresh infos from server."
+  (let ((buf (get-buffer-create mu4e-main-buffer-name))
+        (headers-buffer (mu4e-get-headers-buffer)))
+    (if (eq mu4e-split-view 'single-window)
+        (cond ((not (buffer-live-p headers-buffer))
+               (mu4e~main-menu))
+              ((eq (window-old-buffer) headers-buffer)
+               (mu4e~main-menu))
+              (t (switch-to-buffer headers-buffer)))
+      ;; `mu4e~main-view' is called from `mu4e~start', so don't call it
+      ;; a second time here i.e. do not refresh unless specified
+      ;; explicitely with REFRESH arg.
+      (switch-to-buffer buf)
+      (with-current-buffer buf
+        (mu4e~main-view-real-1 refresh))
+      (goto-char (point-min)))
+    (add-to-list 'global-mode-string '(:eval (mu4e-context-label))))))
+;; ** mu4e initialisation
+    :init
+    ;; helper for authentification
+    (defun offlineimap-get-password (machine user port)
+     "Get the password of ~/.authinfo.gpg from its MACHINE, USER, PORT."
+     (require 'netrc)
+     (let* ((netrc (netrc-parse
+                    (expand-file-name "~/.authinfo.gpg")))
+            credentials password)
+      (catch 'password
+       (dolist (credentials netrc)
+        (when (netrc-machine (list credentials) machine)
+         (dolist (lst credentials)
+          (when (and (string= (cdr (assoc "login" credentials)) user)
+                     (string= (cdr (assoc "port" credentials)) port))
+           (throw 'password (cdr (assoc "password" credentials))))))))))
+    :bind
+    ("<f12>" . mu4e))
+
+;; ** Sending mail
+(use-package smtpmail
+    :ensure nil
+    :custom
+    (smtp-auth-credentials
+     (expand-file-name "~/.authinfo.gpg"))
+    ;; start in normal mode (default)
+    ;; (smtpmail-queue-mail nil)
+;; *** debugging
+    ;; (smtp-debug-information t)
+    ;; (smtp-debug-verbose t)
+;; *** actually sending mail
+    (message-send-mail-function
+     'smtpmail-send-it))
+
+;; ** Composing mail
+;; use org for rich text emails
+(use-package org-mu4e
+    :ensure nil
+    :after mu4e
+    :custom
+    (org-mu4e-convert-to-html t)
+    :bind
+    (:map mu4e-headers-mode-map
+          ("C-c c" . org-mu4e-store-and-capture))
+    (:map mu4e-view-mode-map
+          ("C-c c" . org-mu4e-store-and-capture)))
+#+end_src
+
 *** .offlineimaprc :week1:
 This is a simple offlineimap configuration file, it specifies the accounts, eventually the folders to sync, the passwords and the certificates of the mail provider.
 
@@ -81,9 +267,13 @@ folderfilter = lambda foldername: foldername not in ['[Gmail]/All Mail']
 #+end_src
 
 *** gpg key
-Since I rely on encryption to secure my credentials; here a simple memo :
+
+I rely on encryption to secure my credentials rather than relying on the security of tiers services.
+
+Here a simple memo :
 
 **** creation :week1:
+
 the simplest way get a pair of gpg key is to create them interactively in a terminal:
 #+begin_src bash :eval no
 gpg2 --full-generate-key
@@ -91,7 +281,7 @@ gpg2 --full-generate-key
 
 And that is pretty all with gpg alone, now we can uses this key inside emacs and with other softwares.
 
-*this didn't worked*
+*this didn't worked on mac*
 
 **** in batch mode :week2:
 
@@ -132,7 +322,7 @@ rm /tmp/crypto
 : gpg: revocation certificate stored as '/tmp/tmp.UdBqBAWACV/openpgp-revocs.d/F3D6DE5627A10F4D8CDAE84CD084633A29F0D54E.rev'
 : gpg: done
 
-*this didn't worked*
+*that didn't worked again on mac*
 Big sur was complaining about more parameters :/
 
 **** again interactively :week3:
@@ -246,16 +436,7 @@ Thankfully to ~netrc.el~, the solution can be abstracted without too much boiler
   (offlineimap-get-password "imap.gmail.com" "lazysnail2077@gmail.com" "993")
 #+end_src
 
-*** pittfalls :week1:
-
- - activate IMAP in the gmail settings
- - authorize "the less trusted applications"
- - disconnect
- - reconnect and validate in the security logs that's me who authorized the previous step.
- - It may be necessary to go to a page validing a captcha ???
-
-It may not work yet and nobody will reliably tell you why. take a tea.
-then try to authenticate again with your IMAP client :
+*** offlineimap dry run :week1:
 
 Make a dry run to test the setup and eventually get the informations about your mail folders:
 
@@ -263,15 +444,47 @@ Make a dry run to test the setup and eventually get the informations about your 
 offlineimap --dry-run
 #+end_src
 
-~offlineimap~ will throw errors with --dry-run when it is not initialized.
-This is a known bug, confusing, but known.
+~offlineimap~ will throw errors with --dry-run when it is not yet initialized.
+This is a known bug, confusing, disturbing, but known.
 So when using --dry-run to see the mailboxes creations with your =.offlineimaprc= settings, keep this in mind.
 
 *Always backup your local mailboxes before implementing new configurations!*
 
+*** specific mail providers configuration :week4:
+
+I would recommend to *not* use gmail or outlook. Not only they are proprietary services that are actively building a permanent record on you, but also they make a lot of things harder that it has to be by denying you many security decisions, taking away your time, forcing you to give more personal informations than necessary. Because you are already making the effort to setup your MUA, it may be appropriate to also take the time to get a better mail provider than a spy ;)
+
+But maybe you have no choice... so, let's see the extra steps they are requiring :
+
++ for gmail :
+
+ - activate IMAP in the gmail settings
+ - authorize "the less trusted applications"
+ - disconnect
+ - reconnect and validate in the security logs that's me who authorized the previous step.
+ - It may be necessary to go to a page validating a captcha ???
+
+It may not work yet and nobody will reliably tell you why. take a tea.
+then try to authenticate again with your IMAP client :
+
++ For outlook :
+
+We do not find a way to get right the imap and the smtp without relying on tiers software.
+For some obscure reason there were always something wrong with their ‘modern authentification’. App password or not, that was not working. I get it by creating an alias of an outlook account, but that is something you may be also denied to do.
+
+So we installed [[http://davmail.sourceforge.net/gettingstarted.html][davmail]]. Once installed, the configuration is really straightforward (you probably just have to get your .authinfo and .offlineimap to point to localhost with the right port and an app password).
+
+Apart that you may want to see the davmail configuration file (that is located at /etc/davmail.properties on debian) and if you use offlineimap, to set :
+
+#+begin_example
+davmail.enableKeepAlive=false
+#+end_example
+
+Note that outlook locked my account after a few days, requiring for some reason that in top of a double authentification I also provide a phone number. I won't miss it.
+
 *** initialize mu :week1:
 
-Once the IMAP client is setup, we can initialize mu.
+Once the IMAP client is setup, we can initialize mu and index.
 #+begin_src sh
 mu init --maildir ~/.mail              \
   --my-address=2077snaillazy@gmail.com \
@@ -279,130 +492,189 @@ mu init --maildir ~/.mail              \
 mu index
 #+end_src
 
-*** contexts :week1:
+*** contexts :week1:week4:
 
-mu4e allow to have multiple mail adress in the same setup. It is a good idea to defines these settings in a separate file from your main emacs configuration so it can be easily ignored by git with the =.gitignore= file, eg in ~user-emacs-directory~ =./personal/mu4e-contexts.el=
+~mu4e~ allow to have multiple mail adress in the same setup. It is a good idea to defines these settings in a separate file from your main emacs configuration so it can be easily ignored by git with the =.gitignore= file, eg in ~user-emacs-directory~ =./personal/mu4e-contexts.el=
 
 I done it as a template. You can modify the top variables with your personal informations and they will be inlined at the appropriate place. You will also like to put your own signature, and to change the directory names with the ones appropriate for your mail provider. To declare more accounts, declare new top variables and add new ~make-mu4e-context~ expressions for them in the list.
 
+Some of the top variable may seem to be duplicates, however, if you have many mailboxes with similar names, you will have to keep this distinctions clear as the context-name, the username, the fullname and the address mail are distincts things.
 
-TODO: review this match function for a more simple use with
+By using the ‘:results code’ parameter of this org-block, I can see the pretty-printed result of the template below when evaluating it and verify more easily that the templating does not goes wrong.
 
-(string-prefix-p "/gmail" (mu4e-message-field msg :maildir)
-
-#+begin_src emacs-lisp :eval no  :tangle (concat  user-emacs-directory "personal/mu4e-contexts.el")
-(let* ((name1 "lazysnail2077")
-       (address1 (concat name1 "@gmail.com"))
+#+begin_src emacs-lisp  :tangle (concat  user-emacs-directory "personal/mu4e-contexts.el") :results replace code
+(let* ((context1 "lazysnail2077")
+       (name1 "lazysnail2077")
+       (address1 "lazysnail2077@gmail.com")
        (fullname1 "Lazy Snail")
-       (name2 "2077snaillazy")
-       (address2 (concat name2 "@gmail.com"))
+       (context2 "2077snaillazy")
+       (name2 "lazysnail2077")
+       (address2 "2077snaillazy@gmail.com")
        (fullname2 "Snail Lazy "))
-;; a backquote with eval are used here to allow
-;; inline expressions prefixed with a comma
-  (eval
-   `(progn
-;; * default value
-      (customize-set-variable 'user-mail-address address1)
-;; * contexts
-      (setq mu4e-contexts
-;; ** 1 account
-            (list
-             (make-mu4e-context
-              :name ,fullname1
-              :enter-func (lambda ()
-                            (mu4e-message "Hello world."))
-;; this function change context by matching
-;; any mail that contact address1
-;; or uses one of its folders.
-;; this is quite agressive and the
-;; second part must be yet more tested
-              :match-func (lambda (msg)
-                            (or
-                             (when msg
-                               (mu4e-message-contact-field-matches
-                                msg '(:from :to :cc :bcc)
-                                ,address1))
-                             (when-let ((msg (mu4e-message-at-point 'no-error)))
-                               (string-match-p
-                                (concat "^/" ,name1 "/")
-                                (mu4e-message-field msg :maildir)))))
-              :vars '((user-mail-address . ,address1)
-                      (user-full-name . ,fullname1)
-                      (mu4e-compose-signature
-                       . "A snail is, in loose terms,
+  ;; * default value
+  (customize-set-variable 'user-mail-address address1)
+  ;; backquotes are used here to allow inlined
+  ;; expressions prefixed with a comma
+  ;; * contexts
+  (setq mu4e-contexts
+        ;; ** 1 account
+        `(,(make-mu4e-context
+            :name context1
+            :enter-func (lambda ()
+                          (mu4e-message "Hello world."))
+            ;; this function change context by matching
+            ;; any mail that contact address1
+            ;; or uses one of its folders.
+            ;; this is quite agressive and the
+            ;; second part must be yet more tested
+            :match-func `(lambda (msg)
+                           (or
+                            (when-let ((msg (mu4e-message-at-point 'no-error)))
+                              (string-match-p
+                               (concat "^/" ,name1 "/")
+                               (mu4e-message-field msg :maildir)))
+                            (when msg
+                              (mu4e-message-contact-field-matches
+                               msg '(:from :to :cc :bcc)
+                               ,address1))))
+            :vars `((user-mail-address . ,address1)
+                    (user-full-name . ,fullname1)
+                    (mu4e-compose-signature
+                     . "A snail is, in loose terms,
 a shelled gastropod.\n")
-;; *** 1 inbox settings
-;; initialise the folders otherwise
-;; it will uses and creates defaults ones
-                      (mu4e-trash-folder
-                       . ,(concat "/" name1
-                                  "/[Gmail].Trash"))
-                      (mu4e-sent-folder
-                       . ,(concat "/" name1
-                                  "/[Gmail].Sent Mail"))
-                      (mu4e-drafts-folder
-                       . ,(concat "/" name1
-                                  "/[Gmail].Drafts"))
-                      (mu4e-maildir-shortcuts
-                       . ((,(concat "/" name1 "/INBOX") . ?i)
-                          (,(concat "/" name1 "/[Gmail].Trash") . ?t)
-                          (,(concat "/" name1 "/[Gmail].Sent Mail") . ?s)
-                          (,(concat "/" name1 "/[Gmail].Spam") . ?S)))
-;; *** 1 smtp configuration
-                      (smtpmail-queue-dir
-                       . ,(concat "~/.mail/" name1 "/queue/cur"))
-                      (smtpmail-smtp-user . ,name1)
-                      (smtpmail-smtp-server . "smtp.gmail.com")
-                      (smtpmail-smtp-service . 587)))
-;; ** 2 account
-             (make-mu4e-context
-              :name ,fullname2
-              :enter-func (lambda ()
-                            (mu4e-message "Hello there"))
-              :match-func (lambda (msg)
+                    ;; *** 1 inbox settings
+                    ;; initialise the folders otherwise
+                    ;; it will uses and creates defaults ones
+                    (mu4e-trash-folder
+                     . ,(concat "/" name1
+                                "/[Gmail].Trash"))
+                    (mu4e-sent-folder
+                     . ,(concat "/" name1
+                                "/[Gmail].Sent Mail"))
+                    (mu4e-drafts-folder
+                     . ,(concat "/" name1
+                                "/[Gmail].Drafts"))
+                    (mu4e-maildir-shortcuts
+                     . ((,(concat "/" name1 "/INBOX") . ?i)
+                        (,(concat "/" name1 "/[Gmail].Trash") . ?t)
+                        (,(concat "/" name1 "/[Gmail].Sent Mail") . ?s)
+                        (,(concat "/" name1 "/[Gmail].Spam") . ?S)))
+                    ;; *** 1 smtp configuration
+                    (smtpmail-queue-dir
+                     . ,(concat "~/.mail/" name1 "/queue/cur"))
+                    (smtpmail-smtp-user . ,name1)
+                    (smtpmail-smtp-server . "smtp.gmail.com")
+                    (smtpmail-smtp-service . 587)))
+           ;; ** 2 account
+           ,(make-mu4e-context
+             :name context2
+             :enter-func (lambda ()
+                           (mu4e-message "Hello there"))
+             :match-func `(lambda (msg)
                             (or
-                             (when msg
-                               (mu4e-message-contact-field-matches
-                                msg '(:from :to :cc :bcc) ,address2))
                              (when-let ((msg (mu4e-message-at-point 'no-error)))
                                (string-match-p
                                 (concat "^/" ,name2 "/")
-                                (mu4e-message-field msg :maildir)))))
-              :vars '((user-mail-address . ,address2)
-                      (user-full-name . ,fullname2)
-                      (mu4e-compose-signature
-                       . "Snails feed at night,
+                                (mu4e-message-field msg :maildir)))
+                             (when msg
+                               (mu4e-message-contact-field-matches
+                                msg '(:from :to :cc :bcc) ,address2))))
+             :vars `((user-mail-address . ,address2)
+                     (user-full-name . ,fullname2)
+                     (mu4e-compose-signature
+                      . "Snails feed at night,
 and they have teeths!")
-;; *** 2 inbox settings
-;; initialise the folders otherwise
-;; it will uses defaults ones
-                      (mu4e-trash-folder
-                       . ,(concat "/" name2 "/[Gmail].Trash"))
-                      (mu4e-sent-folder
-                       . ,(concat "/" name2 "/[Gmail].Sent Mail"))
-                      (mu4e-drafts-folder
-                       . ,(concat "/" name2 "/[Gmail].Drafts"))
-                      (mu4e-maildir-shortcuts
-                       . ((,(concat "/" name2 "/INBOX") . ?i)
-                          (,(concat "/" name2 "/[Gmail].Trash") . ?t)
-                          (,(concat "/" name2 "/[Gmail].Sent Mail") . ?s)
-                          (,(concat "/" name2 "/[Gmail].Spam") . ?S)))
-                      (smtpmail-queue-dir
-                       . ,(concat "~/.mail/" name2 "/queue/cur"))
-;; *** 2 smtp configuration
-                      (smtpmail-smtp-user . ,name2)
-                      (smtpmail-smtp-server . "smtp.gmail.com")
-                      (smtpmail-smtp-service . 587))))))))
+                     ;; *** 2 inbox settings
+                     ;; initialise the folders otherwise
+                     ;; it will uses defaults ones
+                     (mu4e-trash-folder
+                      . ,(concat "/" name2 "/[Gmail].Trash"))
+                     (mu4e-sent-folder
+                      . ,(concat "/" name2 "/[Gmail].Sent Mail"))
+                     (mu4e-drafts-folder
+                      . ,(concat "/" name2 "/[Gmail].Drafts"))
+                     (mu4e-maildir-shortcuts
+                      . ((,(concat "/" name2 "/INBOX") . ?i)
+                         (,(concat "/" name2 "/[Gmail].Trash") . ?t)
+                         (,(concat "/" name2 "/[Gmail].Sent Mail") . ?s)
+                         (,(concat "/" name2 "/[Gmail].Spam") . ?S)))
+                     (smtpmail-queue-dir
+                      . ,(concat "~/.mail/" name2 "/queue/cur"))
+                     ;; *** 2 smtp configuration
+                     (smtpmail-smtp-user . ,name2)
+                     (smtpmail-smtp-server . "smtp.gmail.com")
+                     (smtpmail-smtp-service . 587))))))
+#+end_src
 
-;; * end
-(provide 'mu4e-contexts.el)
+#+RESULTS:
+#+begin_src emacs-lisp
+(#s(mu4e-context "lazysnail2077"
+                 (lambda nil
+                   (mu4e-message "Hello world."))
+                 nil
+                 (lambda
+                     (msg)
+                   (or
+                    (when-let
+                        ((msg
+                          (mu4e-message-at-point 'no-error)))
+                      (string-match-p
+                       (concat "^/" "lazysnail2077" "/")
+                       (mu4e-message-field msg :maildir)))
+                    (when msg
+                      (mu4e-message-contact-field-matches msg
+                                                          '(:from :to :cc :bcc)
+                                                          "lazysnail2077@gmail.com"))))
+                 ((user-mail-address . "lazysnail2077@gmail.com")
+                  (user-full-name . "Lazy Snail")
+                  (mu4e-compose-signature . "A snail is, in loose terms,\na shelled gastropod.\n")
+                  (mu4e-trash-folder . "/lazysnail2077/[Gmail].Trash")
+                  (mu4e-sent-folder . "/lazysnail2077/[Gmail].Sent Mail")
+                  (mu4e-drafts-folder . "/lazysnail2077/[Gmail].Drafts")
+                  (mu4e-maildir-shortcuts
+                   ("/lazysnail2077/INBOX" . 105)
+                   ("/lazysnail2077/[Gmail].Trash" . 116)
+                   ("/lazysnail2077/[Gmail].Sent Mail" . 115)
+                   ("/lazysnail2077/[Gmail].Spam" . 83))
+                  (smtpmail-queue-dir . "~/.mail/lazysnail2077/queue/cur")
+                  (smtpmail-smtp-user . "lazysnail2077")
+                  (smtpmail-smtp-server . "smtp.gmail.com")
+                  (smtpmail-smtp-service . 587)))
+   #s(mu4e-context "2077snaillazy"
+                   (lambda nil
+                     (mu4e-message "Hello there"))
+                   nil
+                   (lambda
+                       (msg)
+                     (or
+                      (when-let
+                          ((msg
+                            (mu4e-message-at-point 'no-error)))
+                        (string-match-p
+                         (concat "^/" "lazysnail2077" "/")
+                         (mu4e-message-field msg :maildir)))
+                      (when msg
+                        (mu4e-message-contact-field-matches msg
+                                                            '(:from :to :cc :bcc)
+                                                            "2077snaillazy@gmail.com"))))
+                   ((user-mail-address . "2077snaillazy@gmail.com")
+                    (user-full-name . "Snail Lazy ")
+                    (mu4e-compose-signature . "Snails feed at night,\nand they have teeths!")
+                    (mu4e-trash-folder . "/lazysnail2077/[Gmail].Trash")
+                    (mu4e-sent-folder . "/lazysnail2077/[Gmail].Sent Mail")
+                    (mu4e-drafts-folder . "/lazysnail2077/[Gmail].Drafts")
+                    (mu4e-maildir-shortcuts
+                     ("/lazysnail2077/INBOX" . 105)
+                     ("/lazysnail2077/[Gmail].Trash" . 116)
+                     ("/lazysnail2077/[Gmail].Sent Mail" . 115)
+                     ("/lazysnail2077/[Gmail].Spam" . 83))
+                    (smtpmail-queue-dir . "~/.mail/lazysnail2077/queue/cur")
+                    (smtpmail-smtp-user . "lazysnail2077")
+                    (smtpmail-smtp-server . "smtp.gmail.com")
+                    (smtpmail-smtp-service . 587))))
 #+end_src
 
 Once all these prerequisite are fulfilled, and mu4e is correctly configured in your emacs configuration, now you should have a mu4e working with multiple mail accounts ! \o/
-
-TODO: refine the gmail integration.
-
-Do we need to set (setq mu4e-sent-messages-behavior 'delete) ?
 
 *** add faces to the accounts in the header view :week2:
 
@@ -473,6 +745,29 @@ The nice thing about the refile policy of mu4e is, it done in elisp and by a fun
            (t  "/archive"))))
 #+end_src
 
+*** debugging your setup :week4:
+
+In all the settings specified something may have gone wrong. Hopefully you have figured out what with the logs of your IMAP client but what if it is the SMTP that have an issue ?
+
+You can activate logs for that with :
+#+begin_src emacs-lisp
+(setq smtp-debug-information t)
+(setq smtp-debug-verbose t)
+#+end_src
+
+~mu4e~ have also some settings you can activate with :
+#+begin_src emacs-lisp
+(mu4e-toggle-logging)
+#+end_src
+Then consult with:
+#+begin_src emacs-lisp
+(mu4e-show-log)
+#+end_src
+
+With the mu4e contexts, you may have some settings that are not set accordingly when switching contexts, the way to inspect them is simply to inspect the =smtpmail-*= variables.
+
+eg, when switching context, is the =smtpmail-smtp-user= set to the new context ?
+What about =smtpmail-starttls-credentials= ?
 ** facilitate code navigation inside emacs
 
 #+CAPTION: with defaults settings, read may code become difficult.
@@ -835,42 +1130,9 @@ _To get help buffer for the major mode of magit (no prefix map available by defa
 
 [[https://github.com/magit/magit/issues/4408][I started an issue at this subject.]]
 
-~vc~ is a library that can be used with many others version control software, not only git, and have less commands for git.
+~vc~ is a library that can be used with many others version control software, not only git, and have less commands for git. [[elisp:(info "(emacs) Version Control")][vc is documented in the emacs manual]], (not the elisp one).
 
-That's being say, let's see a basic workflow with ~vc~ :
-
-*** trying a basic workflow with vc :week3:
-
-[[elisp:(info "(emacs) Version Control")][vc is documented in the emacs manual]], (not the elisp one).
-
-In a directory under version control,
-
-  1. At any time, I can use =C-x v l= that runs the command ~vc-print-log~ to see the locals logs of the version control system. In this buffer I can get informations about the bindings available with =C-x h m= or simply =?=. A notable command here is === that run ~log-view-diff= on the commit at point.
-
-  2. I want to check the changes of the remote repository, I can use =C-x v I= that runs ~vc-log-incoming~ to see what they are (maybe none).
-
-  3. If there are changes on the remote repository, I surely want to pull them and I can use =C-x v += that runs the command ~vc-update~ that is an alias to ~vc-pull~. As usual if there is non commited changes on the directory, we will be warned to commit them before trying to merge the remote changes.
-
-  4. I have non commited changes, I want informations about them *--also see 7.!*, I can use =C-x v ==  runs the command ~vc-diff~.
-[[elisp:(info "(emacs) Old Revisions")][vc-diff is documented itself in (emacs) Old Revisions]], while the [[elisp:(info "(emacs) Diff Mode")][the diff mode have its own pages in (emacs) Diff Mode]] and allow to interactively manipulate diff buffers and eg, choose what hunks apply or revert .
-    4.1 with =C-c C-a= that runs ~diff-apply-hunk~, I can apply hunks or revert them with =C-u= an ~universal-argument~.
-    4.2 with =C-c C-c= that runs ~diff-goto-source~, I can go to the source to modify my change before committing them.
-    4.3 with =g= that runs ~revert-buffer~, I can actualise the buffer with the new changes applied.
-    4.4 with =C-x 4 A=, I can generate a changelog entry to later use in the commit message.
-
-  5. I am done with revising the changes, I want to commit. I can uses the DWIM (Do What I Mean) command =C-x v v= runs the command ~vc-next-action~. I am prompted to commit my changes, I can make my commit and validate it with =C-c C-c= and ask for the next action again with =C-x v v=.
-
-  6. Eventually there will be conflicting changes between my local files and the remote one. So =C-x v v= may have triggered the command =C-x v m= ~vc-merge~. At this point I think Emacs put automatically the targeted files in ~smerge-mode~ that enable a special view and commands. I did not find much information about it in the manual but  [[elisp:(describe-function 'smerge-mode)][asking to describe the function will show you informations about its keymap]]
-    6.1 we can quickly choose what hunks to keep with =C-c ^ u= ~smerge-keep-upper~
-    6.2 or =C-c ^ l= ~smerge-keep-lower~
-    6.3 and going directly to the next conflict with =C-c ^ n= ~smerge-next~. Note that there is more commands and I should spend a little more time to understand them.
-  When done =C-x v += should respond we are up to date.
-
-  7. Here I am a little bit confused about ~vc~ and its git integration, ~vc~ prompted me to commit changes at step 4. but now if I do changes again, I see no exposed commands to stage and commit them. So I need to do that from a shell with ‘git stage’ and ‘git commit -a’.
-
-  8. After committed new changes again, I want to push my locals changes to the remote repository. I can use =C-x v O= that runs ~vc-log-outgoing~ to see what will be done by =C-x v P= that runs ~vc-push~.
-
-Also and overall I didn't find ~vc~ commands to manipulate branches so I assume again we should use the command line for that.
+[[https:www.youtube.com/watch?v=0YlYX_UjH5Q&autoplay=0][Protesilaos Stavrou has made a video about it.]]
 
 *** (a bit more involved) integration with the forges
 
