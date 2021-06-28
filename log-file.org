@@ -1,4 +1,6 @@
-* assisting kartbala in his emacs quest for low vision
+* emacs quest 
+
+Assisting kartbala in his Emacs quest for low vision.
 
 This document specify the steps I used to replicate and develop kartabala/emacs. 
 It is a live document meant to be read inside emacs (github.com does not display some blocks and other useful information!) 
@@ -492,174 +494,287 @@ mu init --maildir ~/.mail              \
 mu index
 #+end_src
 
-*** contexts :week1:week4:
+*** contexts  :week1:week4:week5:
+:PROPERTIES:
+:header-args: :tangle "mu4e-personal-context.el" :results pp :wrap "src emacs-lisp :tangle no" 
+:END:
 
 ~mu4e~ allow to have multiple mail adress in the same setup. It is a good idea to defines these settings in a separate file from your main emacs configuration so it can be easily ignored by git with the =.gitignore= file, eg in ~user-emacs-directory~ =./personal/mu4e-contexts.el=
 
-I done it as a template. You can modify the top variables with your personal informations and they will be inlined at the appropriate place. You will also like to put your own signature, and to change the directory names with the ones appropriate for your mail provider. To declare more accounts, declare new top variables and add new ~make-mu4e-context~ expressions for them in the list.
+I am not sure how much I am complicating the things out of necessity with my template. What I know is [[elisp:(info "(mu4e) Contexts example")][editing multiple contexts as an unique sexp]] with levels and backquotes is an operation that is proportionnaly difficult to the number of contexts you add. 
 
-Some of the top variable may seem to be duplicates, however, if you have many mailboxes with similar names, you will have to keep this distinctions clear as the context-name, the username, the fullname and the address mail are distincts things.
+So here an helper function to get one context at a time based on the context-name, while preventing us to dupplicate contexts on multiple evaluation that may happen when tweaking the settings.
 
-By using the ‘:results code’ parameter of this org-block, I can see the pretty-printed result of the template below when evaluating it and verify more easily that the templating does not goes wrong.
+#+begin_src emacs-lisp :results silent
+;; * helper
+(cl-defun create-or-update-mu4e-context
+    (&key name enter-func leave-func match-func vars)
+  "Wrapper around `make-mu4e-context',
+to make a mu4e-context at a time,
+update the `mu4e-contexts' list,
+while avoiding duplicating elements
+with the same context name."
+  (let ((new-context
+         (make-mu4e-context
+          :name       name
+          :enter-func enter-func
+          :leave-func leave-func
+          :match-func match-func
+          :vars       vars)))
+    ;; try to find if this
+    ;; context is already here
+    (if-let
+        ((mu4e-context
+          (catch 'context
+            (dolist (mu4e-context mu4e-contexts)
+              (when (string=
+                     name
+                     (mu4e-context-name mu4e-context))
+                (throw 'context mu4e-context))))))
+        ;; so replace the old with the new
+        (setf (car (memq mu4e-context mu4e-contexts))
+              new-context)
+      ;; otherwise push the new
+      (push new-context mu4e-contexts))
+    new-context))
+#+end_src
 
-#+begin_src emacs-lisp  :tangle (concat  user-emacs-directory "personal/mu4e-contexts.el") :results replace code
-(let* ((context1 "lazysnail2077")
-       (name1 "lazysnail2077")
-       (address1 "lazysnail2077@gmail.com")
-       (fullname1 "Lazy Snail")
-       (context2 "2077snaillazy")
-       (name2 "lazysnail2077")
-       (address2 "2077snaillazy@gmail.com")
-       (fullname2 "Snail Lazy "))
-  ;; * default value
-  (customize-set-variable 'user-mail-address address1)
-  ;; backquotes are used here to allow inlined
-  ;; expressions prefixed with a comma
-  ;; * contexts
-  (setq mu4e-contexts
-        ;; ** 1 account
-        `(,(make-mu4e-context
-            :name context1
-            :enter-func (lambda ()
-                          (mu4e-message "Hello world."))
-            ;; this function change context by matching
-            ;; any mail that contact address1
-            ;; or uses one of its folders.
-            ;; this is quite agressive and the
-            ;; second part must be yet more tested
-            :match-func `(lambda (msg)
-                           (or
-                            (when-let ((msg (mu4e-message-at-point 'no-error)))
-                              (string-match-p
-                               (concat "^/" ,name1 "/")
-                               (mu4e-message-field msg :maildir)))
-                            (when msg
-                              (mu4e-message-contact-field-matches
-                               msg '(:from :to :cc :bcc)
-                               ,address1))))
-            :vars `((user-mail-address . ,address1)
-                    (user-full-name . ,fullname1)
-                    (mu4e-compose-signature
-                     . "A snail is, in loose terms,
-a shelled gastropod.\n")
-                    ;; *** 1 inbox settings
-                    ;; initialise the folders otherwise
-                    ;; it will uses and creates defaults ones
-                    (mu4e-trash-folder
-                     . ,(concat "/" name1
-                                "/[Gmail].Trash"))
-                    (mu4e-sent-folder
-                     . ,(concat "/" name1
-                                "/[Gmail].Sent Mail"))
-                    (mu4e-drafts-folder
-                     . ,(concat "/" name1
-                                "/[Gmail].Drafts"))
-                    (mu4e-maildir-shortcuts
-                     . ((,(concat "/" name1 "/INBOX") . ?i)
-                        (,(concat "/" name1 "/[Gmail].Trash") . ?t)
-                        (,(concat "/" name1 "/[Gmail].Sent Mail") . ?s)
-                        (,(concat "/" name1 "/[Gmail].Spam") . ?S)))
-                    ;; *** 1 smtp configuration
-                    (smtpmail-queue-dir
-                     . ,(concat "~/.mail/" name1 "/queue/cur"))
-                    (smtpmail-smtp-user . ,name1)
-                    (smtpmail-smtp-server . "smtp.gmail.com")
-                    (smtpmail-smtp-service . 587)))
-           ;; ** 2 account
-           ,(make-mu4e-context
-             :name context2
-             :enter-func (lambda ()
-                           (mu4e-message "Hello there"))
-             :match-func `(lambda (msg)
-                            (or
-                             (when-let ((msg (mu4e-message-at-point 'no-error)))
-                               (string-match-p
-                                (concat "^/" ,name2 "/")
-                                (mu4e-message-field msg :maildir)))
-                             (when msg
-                               (mu4e-message-contact-field-matches
-                                msg '(:from :to :cc :bcc) ,address2))))
-             :vars `((user-mail-address . ,address2)
-                     (user-full-name . ,fullname2)
-                     (mu4e-compose-signature
-                      . "Snails feed at night,
-and they have teeths!")
-                     ;; *** 2 inbox settings
-                     ;; initialise the folders otherwise
-                     ;; it will uses defaults ones
-                     (mu4e-trash-folder
-                      . ,(concat "/" name2 "/[Gmail].Trash"))
-                     (mu4e-sent-folder
-                      . ,(concat "/" name2 "/[Gmail].Sent Mail"))
-                     (mu4e-drafts-folder
-                      . ,(concat "/" name2 "/[Gmail].Drafts"))
-                     (mu4e-maildir-shortcuts
-                      . ((,(concat "/" name2 "/INBOX") . ?i)
-                         (,(concat "/" name2 "/[Gmail].Trash") . ?t)
-                         (,(concat "/" name2 "/[Gmail].Sent Mail") . ?s)
-                         (,(concat "/" name2 "/[Gmail].Spam") . ?S)))
-                     (smtpmail-queue-dir
-                      . ,(concat "~/.mail/" name2 "/queue/cur"))
-                     ;; *** 2 smtp configuration
-                     (smtpmail-smtp-user . ,name2)
-                     (smtpmail-smtp-server . "smtp.gmail.com")
-                     (smtpmail-smtp-service . 587))))))
+The next blocks will be tangled into "mu4e-personal-context.el", in the same directory. They produce on evaluation a pretty-printed result to let us inspect their correctness.
+
+If you changed of contexts names, you can always start again from 0 by erasing the whole list :
+
+#+begin_src emacs-lisp :results silent :tangle no
+(setq mu4e-contexts nil)
+#+end_src
+
+**** lazysnail2077@gmail.com
+
+#+begin_src  emacs-lisp 
+;; * lazysnail2077@gmail.com
+(let* ((context-name "L")
+       (user-name "lazysnail2077")
+       (address "lazysnail2077@gmail.com")
+       (full-name "Lazy Snail"))
+  (create-or-update-mu4e-context
+   :name
+   context-name
+;; ** functions
+   :enter-func
+   `(lambda ()
+      (mu4e-message
+       ,(concat "Hello " address)))
+   :leave-func
+   `(lambda ()
+      (mu4e-message
+       ,(concat "Bye " address)))
+   :match-func
+   `(lambda (msg)
+      (when msg
+        (string-match-p
+         (concat "^/" ,user-name "/")
+         (mu4e-message-field
+          msg :maildir))))
+   :vars
+   `((user-mail-address . ,address)
+     (user-full-name . ,full-name)
+     (mu4e-compose-signature
+      . "")
+;; **  inbox settings
+     ;; initialise the folders otherwise
+     ;; it will uses and creates defaults ones
+     (mu4e-trash-folder
+      . ,(concat "/" user-name
+                 "/[Gmail].Trash"))
+     (mu4e-sent-folder
+      . ,(concat "/" user-name
+                 "/[Gmail].Sent Mail"))
+     (mu4e-drafts-folder
+      . ,(concat "/" user-name
+                 "/[Gmail].Drafts"))
+     (mu4e-maildir-shortcuts
+      . ((,(concat "/" user-name "/INBOX") . ?i)
+         (,(concat "/" user-name "/[Gmail].Trash") . ?t)
+         (,(concat "/" user-name "/[Gmail].Sent Mail") . ?s)
+         (,(concat "/" user-name "/[Gmail].Spam") . ?S)))
+;; **  smtp configuration
+     (smtpmail-queue-dir
+      . ,(concat "~/.mail/" user-name "/queue/cur"))
+     (smtpmail-smtp-user . ,user-name)
+     (smtpmail-mail-address . ,address)
+     (smtpmail-smtp-server . "smtp.gmail.com")
+     (smtpmail-smtp-service . 587))))
 #+end_src
 
 #+RESULTS:
-#+begin_src emacs-lisp
-(#s(mu4e-context "lazysnail2077"
+#+begin_src emacs-lisp :tangle no
+#s(mu4e-context "L"
+                (lambda nil
+                  (mu4e-message "Hello lazysnail2077@gmail.com"))
+                (lambda nil
+                  (mu4e-message "Bye lazysnail2077@gmail.com"))
+                (lambda
+                  (msg)
+                  (when msg
+                    (string-match-p
+                     (concat "^/" "lazysnail2077" "/")
+                     (mu4e-message-field msg :maildir))))
+                ((user-mail-address . "lazysnail2077@gmail.com")
+                 (user-full-name . "Lazy Snail")
+                 (mu4e-compose-signature . "")
+                 (mu4e-trash-folder . "/lazysnail2077/[Gmail].Trash")
+                 (mu4e-sent-folder . "/lazysnail2077/[Gmail].Sent Mail")
+                 (mu4e-drafts-folder . "/lazysnail2077/[Gmail].Drafts")
+                 (mu4e-maildir-shortcuts
+                  ("/lazysnail2077/INBOX" . 105)
+                  ("/lazysnail2077/[Gmail].Trash" . 116)
+                  ("/lazysnail2077/[Gmail].Sent Mail" . 115)
+                  ("/lazysnail2077/[Gmail].Spam" . 83))
+                 (smtpmail-queue-dir . "~/.mail/lazysnail2077/queue/cur")
+                 (smtpmail-smtp-user . "lazysnail2077")
+                 (smtpmail-mail-address . "lazysnail2077@gmail.com")
+                 (smtpmail-smtp-server . "smtp.gmail.com")
+                 (smtpmail-smtp-service . 587)))
+#+end_src
+
+**** 2077snaillazy@gmail.com
+
+#+begin_src  emacs-lisp
+;; * 2077snaillazy@gmail.com
+(let* ((context-name "2")
+       (user-name "2077snaillazy")
+       (address "2077snaillazy@gmail.com")
+       (full-name "Snail Lazy"))
+
+  (create-or-update-mu4e-context
+   :name
+   context-name
+;; ** functions
+   :enter-func
+   `(lambda ()
+      (mu4e-message
+       ,(concat "Hello " address)))
+   :leave-func
+   `(lambda ()
+      (mu4e-message
+       ,(concat "Bye " address)))
+   :match-func
+   `(lambda (msg)
+      (when msg
+        (string-match-p
+         (concat "^/" ,user-name "/")
+         (mu4e-message-field
+          msg :maildir))))
+   :vars
+   `((user-mail-address . ,address)
+     (user-full-name . ,full-name)
+     (mu4e-compose-signature
+      . "")
+;; **  inbox settings
+     ;; initialise the folders otherwise
+     ;; it will uses and creates defaults ones
+     (mu4e-trash-folder
+      . ,(concat "/" user-name
+                 "/[Gmail].Trash"))
+     (mu4e-sent-folder
+      . ,(concat "/" user-name
+                 "/[Gmail].Sent Mail"))
+     (mu4e-drafts-folder
+      . ,(concat "/" user-name
+                 "/[Gmail].Drafts"))
+     (mu4e-maildir-shortcuts
+      . ((,(concat "/" user-name "/INBOX") . ?i)
+         (,(concat "/" user-name "/[Gmail].Trash") . ?t)
+         (,(concat "/" user-name "/[Gmail].Sent Mail") . ?s)
+         (,(concat "/" user-name "/[Gmail].Spam") . ?S)))
+;; **  smtp configuration
+     (smtpmail-queue-dir
+      . ,(concat "~/.mail/" user-name "/queue/cur"))
+     (smtpmail-smtp-user . ,user-name)
+     (smtpmail-mail-address . ,address)
+     (smtpmail-smtp-server . "smtp.gmail.com")
+     (smtpmail-smtp-service . 587))))
+#+end_src
+
+#+RESULTS:
+#+begin_src emacs-lisp :tangle no
+#s(mu4e-context "2"
+                (lambda nil
+                  (mu4e-message "Hello 2077snaillazy@gmail.com"))
+                (lambda nil
+                  (mu4e-message "Bye 2077snaillazy@gmail.com"))
+                (lambda
+                  (msg)
+                  (when msg
+                    (string-match-p
+                     (concat "^/" "2077snaillazy" "/")
+                     (mu4e-message-field msg :maildir))))
+                ((user-mail-address . "2077snaillazy@gmail.com")
+                 (user-full-name . "Snail Lazy")
+                 (mu4e-compose-signature . "")
+                 (mu4e-trash-folder . "/2077snaillazy/[Gmail].Trash")
+                 (mu4e-sent-folder . "/2077snaillazy/[Gmail].Sent Mail")
+                 (mu4e-drafts-folder . "/2077snaillazy/[Gmail].Drafts")
+                 (mu4e-maildir-shortcuts
+                  ("/2077snaillazy/INBOX" . 105)
+                  ("/2077snaillazy/[Gmail].Trash" . 116)
+                  ("/2077snaillazy/[Gmail].Sent Mail" . 115)
+                  ("/2077snaillazy/[Gmail].Spam" . 83))
+                 (smtpmail-queue-dir . "~/.mail/2077snaillazy/queue/cur")
+                 (smtpmail-smtp-user . "2077snaillazy")
+                 (smtpmail-mail-address . "2077snaillazy@gmail.com")
+                 (smtpmail-smtp-server . "smtp.gmail.com")
+                 (smtpmail-smtp-service . 587)))
+#+end_src
+
+**** verify all contexts ?
+
+#+begin_src emacs-lisp :tangle no
+mu4e-contexts
+#+end_src
+
+#+RESULTS:
+#+begin_src emacs-lisp :tangle no
+(#s(mu4e-context "2"
                  (lambda nil
-                   (mu4e-message "Hello world."))
-                 nil
+                   (mu4e-message "Hello 2077snaillazy@gmail.com"))
+                 (lambda nil
+                   (mu4e-message "Bye 2077snaillazy@gmail.com"))
                  (lambda
-                     (msg)
-                   (or
-                    (when-let
-                        ((msg
-                          (mu4e-message-at-point 'no-error)))
-                      (string-match-p
-                       (concat "^/" "lazysnail2077" "/")
-                       (mu4e-message-field msg :maildir)))
-                    (when msg
-                      (mu4e-message-contact-field-matches msg
-                                                          '(:from :to :cc :bcc)
-                                                          "lazysnail2077@gmail.com"))))
-                 ((user-mail-address . "lazysnail2077@gmail.com")
-                  (user-full-name . "Lazy Snail")
-                  (mu4e-compose-signature . "A snail is, in loose terms,\na shelled gastropod.\n")
-                  (mu4e-trash-folder . "/lazysnail2077/[Gmail].Trash")
-                  (mu4e-sent-folder . "/lazysnail2077/[Gmail].Sent Mail")
-                  (mu4e-drafts-folder . "/lazysnail2077/[Gmail].Drafts")
+                   (msg)
+                   (when msg
+                     (string-match-p
+                      (concat "^/" "2077snaillazy" "/")
+                      (mu4e-message-field msg :maildir))))
+                 ((user-mail-address . "2077snaillazy@gmail.com")
+                  (user-full-name . "Snail Lazy")
+                  (mu4e-compose-signature . "")
+                  (mu4e-trash-folder . "/2077snaillazy/[Gmail].Trash")
+                  (mu4e-sent-folder . "/2077snaillazy/[Gmail].Sent Mail")
+                  (mu4e-drafts-folder . "/2077snaillazy/[Gmail].Drafts")
                   (mu4e-maildir-shortcuts
-                   ("/lazysnail2077/INBOX" . 105)
-                   ("/lazysnail2077/[Gmail].Trash" . 116)
-                   ("/lazysnail2077/[Gmail].Sent Mail" . 115)
-                   ("/lazysnail2077/[Gmail].Spam" . 83))
-                  (smtpmail-queue-dir . "~/.mail/lazysnail2077/queue/cur")
-                  (smtpmail-smtp-user . "lazysnail2077")
+                   ("/2077snaillazy/INBOX" . 105)
+                   ("/2077snaillazy/[Gmail].Trash" . 116)
+                   ("/2077snaillazy/[Gmail].Sent Mail" . 115)
+                   ("/2077snaillazy/[Gmail].Spam" . 83))
+                  (smtpmail-queue-dir . "~/.mail/2077snaillazy/queue/cur")
+                  (smtpmail-smtp-user . "2077snaillazy")
+                  (smtpmail-mail-address . "2077snaillazy@gmail.com")
                   (smtpmail-smtp-server . "smtp.gmail.com")
                   (smtpmail-smtp-service . 587)))
-   #s(mu4e-context "2077snaillazy"
+   #s(mu4e-context "L"
                    (lambda nil
-                     (mu4e-message "Hello there"))
-                   nil
+                     (mu4e-message "Hello lazysnail2077@gmail.com"))
+                   (lambda nil
+                     (mu4e-message "Bye lazysnail2077@gmail.com"))
                    (lambda
-                       (msg)
-                     (or
-                      (when-let
-                          ((msg
-                            (mu4e-message-at-point 'no-error)))
-                        (string-match-p
-                         (concat "^/" "lazysnail2077" "/")
-                         (mu4e-message-field msg :maildir)))
-                      (when msg
-                        (mu4e-message-contact-field-matches msg
-                                                            '(:from :to :cc :bcc)
-                                                            "2077snaillazy@gmail.com"))))
-                   ((user-mail-address . "2077snaillazy@gmail.com")
-                    (user-full-name . "Snail Lazy ")
-                    (mu4e-compose-signature . "Snails feed at night,\nand they have teeths!")
+                     (msg)
+                     (when msg
+                       (string-match-p
+                        (concat "^/" "lazysnail2077" "/")
+                        (mu4e-message-field msg :maildir))))
+                   ((user-mail-address . "lazysnail2077@gmail.com")
+                    (user-full-name . "Lazy Snail")
+                    (mu4e-compose-signature . "")
                     (mu4e-trash-folder . "/lazysnail2077/[Gmail].Trash")
                     (mu4e-sent-folder . "/lazysnail2077/[Gmail].Sent Mail")
                     (mu4e-drafts-folder . "/lazysnail2077/[Gmail].Drafts")
@@ -670,19 +785,18 @@ and they have teeths!")
                      ("/lazysnail2077/[Gmail].Spam" . 83))
                     (smtpmail-queue-dir . "~/.mail/lazysnail2077/queue/cur")
                     (smtpmail-smtp-user . "lazysnail2077")
+                    (smtpmail-mail-address . "lazysnail2077@gmail.com")
                     (smtpmail-smtp-server . "smtp.gmail.com")
                     (smtpmail-smtp-service . 587))))
 #+end_src
 
-Once all these prerequisite are fulfilled, and mu4e is correctly configured in your emacs configuration, now you should have a mu4e working with multiple mail accounts ! \o/
-
-*** add faces to the accounts in the header view :week2:
+**** add faces to the accounts in the header view :week2:
 
 Freely readapted from [[https://emacs.stackexchange.com/questions/26913/coloring-mu4e-headers-based-on-title-content#50708][coloring-mu4e-headers-based-on-title-content]].
 
 colors can be introspected with ~list-colors-display~
 
-#+begin_src emacs-lisp
+#+begin_src emacs-lisp :results silent
 (defvar mu4e-accounts-colors
   '(("lazysnail2077@gmail.com" . "green")
     ("2077snaillazy@gmail.com" . "red")))
@@ -766,8 +880,8 @@ Then consult with:
 
 With the mu4e contexts, you may have some settings that are not set accordingly when switching contexts, the way to inspect them is simply to inspect the =smtpmail-*= variables.
 
-eg, when switching context, is the =smtpmail-smtp-user= set to the new context ?
-What about =smtpmail-starttls-credentials= ?
+eg, when switching context, is the =smtpmail-smtp-user= set to the new context ? Look at it with =C-h a=.
+
 ** facilitate code navigation inside emacs
 
 #+CAPTION: with defaults settings, read may code become difficult.
