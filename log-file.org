@@ -342,6 +342,10 @@ echo 'export GPG_TTY=$(tty)' >> ~/.profile
 And eventually need to ‘source ~/.zshrc’ to get updated a current session.
 *And eventually need to reboot*
 
+**** try a front end ? :week5:
+
+[[https://gpgtools.org/]]
+
 **** (optional) sharing our id :week1:
 now eventually we can declare ourselves to keyservers. This may be helpful for eg signing a FSF assessment.
 
@@ -454,7 +458,7 @@ So when using --dry-run to see the mailboxes creations with your =.offlineimaprc
 
 *** specific mail providers configuration :week4:
 
-I would recommend to *not* use gmail or outlook. Not only they are proprietary services that are actively building a permanent record on you, but also they make a lot of things harder that it has to be by denying you many security decisions, taking away your time, forcing you to give more personal informations than necessary. Because you are already making the effort to setup your MUA, it may be appropriate to also take the time to get a better mail provider than a spy ;)
+I would recommend to *not* use gmail or outlook. Not only they are proprietary services that are actively building a permanent record on you, but also they make a lot of things harder that it has to be by denying you many security decisions, taking away your time. Because you are already making the effort to setup your MUA, it may be appropriate to also take the time to get a better mail provider than a spy ;)
 
 But maybe you have no choice... so, let's see the extra steps they are requiring :
 
@@ -474,7 +478,7 @@ then try to authenticate again with your IMAP client :
 We do not find a way to get right the imap and the smtp without relying on tiers software.
 For some obscure reason there were always something wrong with their ‘modern authentification’. App password or not, that was not working. I get it by creating an alias of an outlook account, but that is something you may be also denied to do.
 
-So we installed [[http://davmail.sourceforge.net/gettingstarted.html][davmail]]. Once installed, the configuration is really straightforward (you probably just have to get your .authinfo and .offlineimap to point to localhost with the right port and an app password).
+So we installed [[http://davmail.sourceforge.net/gettingstarted.html][davmail]]. Once installed, the configuration is really straightforward (you probably just have to get your .authinfo and .offlineimap to point to localhost with the right port and an app password). Unfortunally I have still no clue of what is the decisive point that make it work or not. There must be something happening on the exchanges servers that I am not aware of.
 
 Apart that you may want to see the davmail configuration file (that is located at /etc/davmail.properties on debian) and if you use offlineimap, to set :
 
@@ -501,7 +505,7 @@ mu index
 
 ~mu4e~ allow to have multiple mail adress in the same setup. It is a good idea to defines these settings in a separate file from your main emacs configuration so it can be easily ignored by git with the =.gitignore= file, eg in ~user-emacs-directory~ =./personal/mu4e-contexts.el=
 
-I am not sure how much I am complicating the things out of necessity with my template. What I know is [[elisp:(info "(mu4e) Contexts example")][editing multiple contexts as an unique sexp]] with levels and backquotes is an operation that is proportionnaly difficult to the number of contexts you add. 
+I am not sure how much I am complicating the things out of necessity with my template. What I know is [[elisp:(info "(mu4e) Contexts example")][editing multiple contexts as an unique sexp as mentionned in the manual,]] with levels and backquotes is an operation that is proportionnaly difficult to the number of contexts you add. 
 
 So here an helper function to get one context at a time based on the context-name, while preventing us to dupplicate contexts on multiple evaluation that may happen when tweaking the settings.
 
@@ -548,6 +552,8 @@ If you changed of contexts names, you can always start again from 0 by erasing t
 #+end_src
 
 **** lazysnail2077@gmail.com
+
+From here this is very similar to the exemple of the manual, except you can edit one context at a time.
 
 #+begin_src  emacs-lisp 
 ;; * lazysnail2077@gmail.com
